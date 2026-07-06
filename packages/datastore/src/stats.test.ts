@@ -45,7 +45,7 @@ describe("getGatewayStats", () => {
 
       expect(stats.requests.total).toBe(1);
       expect(stats.requests.byStatus).toEqual({ ok: 1 });
-      expect(stats.cache.hitRate).toBe(0.25);
+      expect(stats.cache.hitRate).toBe(0.2);
       expect(stats.models["claude-fable-5"]).toEqual({
         requests: 1,
         inputTokens: 100,

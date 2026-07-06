@@ -108,6 +108,10 @@ export function getGatewayStats(dbPath: string, now = Date.now(), windowMs = 24 
         .all(since),
     );
 
+    const inputTokens = cache.inputTokens ?? 0;
+    const cacheReadTokens = cache.cacheReadTokens ?? 0;
+    const cacheDenominator = inputTokens + cacheReadTokens;
+
     return {
       windowMs,
       requests: {
@@ -115,9 +119,9 @@ export function getGatewayStats(dbPath: string, now = Date.now(), windowMs = 24 
         byStatus,
       },
       cache: {
-        inputTokens: cache.inputTokens ?? 0,
-        cacheReadTokens: cache.cacheReadTokens ?? 0,
-        hitRate: cache.inputTokens ? (cache.cacheReadTokens ?? 0) / cache.inputTokens : null,
+        inputTokens,
+        cacheReadTokens,
+        hitRate: cacheDenominator ? cacheReadTokens / cacheDenominator : null,
       },
       models: Object.fromEntries(
         modelRows.map((row) => [
