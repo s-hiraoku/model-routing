@@ -13,16 +13,16 @@
 
 `scripts/spike-rewrite.ts`(使い捨てスクリプト):
 
-1. 数十行のミニプロキシを起動(Bun.serve、`/v1/messages` の model を固定書き換え、他は素通し)
+1. 数十行のミニプロキシを起動(Bun.serve、`/v1/messages` の model を固定書き換え、他は素通し。必要なら `STRIP_PARAMS=output_config.effort` のように非互換 field を除去)
 2. `ANTHROPIC_BASE_URL=http://localhost:8484 claude -p "1+1は?"` を実行
 3. 確認事項:
-   - [ ] sonnet 指定 → haiku 書き換えで 200 が返る(レスポンスの `model` が haiku)
-   - [ ] sonnet 指定 → opus 書き換えで 200 が返る(プラン上位モデルへの昇格が通るか)
+   - [ ] mid 指定 → haiku 書き換え + `output_config.effort` 除去で 200 が返る(レスポンスの `model` が haiku)
+   - [ ] mid 指定 → opus 書き換えで 200 が返る(プラン上位モデルへの昇格が通るか)
    - [ ] streaming でも同様
    - [ ] 書き換え後も Claude Code の表示・後続ターンが壊れない
 4. 結果を `docs/decisions.md` に記録
 
-**昇格(→opus)だけ拒否される、等の部分的成立もあり得る。** その場合は降格専用機として設計を縮小継続。全滅なら Plan B(ログ・可視化ツール)へ。
+**モデル別の request field 互換性で部分的成立する場合がある。** その場合は `config/models.yaml` の `tiers.*.strip_params` に実機確認済みの除去対象を持たせる。全滅なら Plan B(ログ・可視化ツール)へ。
 
 ## エンドポイント
 
@@ -53,7 +53,8 @@ gateway は 127.0.0.1 バインドのみ。`/internal/*` と `X-MR-Variant` は 
  │ 3. 特徴量抽出(message_count, tool_count, has_tool_results, hashes...)
  │ 4. variant 解決: X-MR-Variant ヘッダ(リプレイ)or 本番ポリシー
  │ 5. [shifting 時] shifter.decide(features, sessionState) → gear_to
- │      gear_to ≠ gear_from なら model 書き換え、shift_events 記録対象に
+ │      gear_to ≠ gear_from なら model 書き換え + gear_to tier の strip_params 適用、
+ │      shift_events 記録対象に
  │ 6. api.anthropic.com へ転送(認証・anthropic-beta 等のヘッダは無加工)
  │ 7. レスポンスを tee(クライアント逐次中継 + 記録用バッファ)
  │ 8. 完了後(非同期): SSE 結合 → Message 再構成 → SQLite + zstd 保存

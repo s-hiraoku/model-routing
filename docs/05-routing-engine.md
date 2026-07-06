@@ -103,6 +103,12 @@ decide(features: RequestFeatures, state: SessionShiftState): ShiftDecision
  └─ 5. 上記いずれも該当なし → hold(素通し)
 ```
 
+### モデル別 request field 互換性
+
+Shifter は gear を決めるだけで、request body の変換は gateway が `config/models.yaml` の tier 定義を見て行う。`gear_to` の tier に `strip_params` がある場合、gateway は model 書き換えと同じタイミングで指定された JSON field を除去する。
+
+例: Claude Code 2.1.201 の `claude-fable-5` リクエストは `output_config.effort` を含むが、`claude-haiku-4-5-20251001` はこの field を受けない。`low.strip_params: ["output_config.effort"]` を適用すると Haiku 降格は実機で 200 になった。互換変換後でも 4xx が返る場合は gateway の degrade guard で元モデルへ 1 回だけ戻す。
+
 ### タスク境界とセッション状態
 
 - hooks の task-event 受信でセッション状態をリセットし、カテゴリを確定 → 次のリクエストがタスク先頭ターン

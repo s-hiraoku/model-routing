@@ -36,6 +36,66 @@ describe("rewriteMessagesBody", () => {
     expect(result.parseError).toBeTruthy();
   });
 
+  test("strips incompatible top-level params while rewriting the model", () => {
+    const result = rewriteMessagesBody(
+      JSON.stringify({
+        model: "claude-fable-example",
+        effort: "medium",
+        stream: true,
+        messages: [{ role: "user", content: "hello" }],
+      }),
+      "claude-haiku-example",
+      ["effort"],
+    );
+
+    expect(result.rewritten).toBe(true);
+    expect(result.strippedParams).toEqual(["effort"]);
+    expect(JSON.parse(result.body)).toEqual({
+      model: "claude-haiku-example",
+      stream: true,
+      messages: [{ role: "user", content: "hello" }],
+    });
+  });
+
+  test("strips incompatible nested params by dot path", () => {
+    const result = rewriteMessagesBody(
+      JSON.stringify({
+        model: "claude-fable-example",
+        output_config: { effort: "medium" },
+        stream: true,
+        messages: [{ role: "user", content: "hello" }],
+      }),
+      "claude-haiku-example",
+      ["output_config.effort"],
+    );
+
+    expect(result.rewritten).toBe(true);
+    expect(result.strippedParams).toEqual(["output_config.effort"]);
+    expect(JSON.parse(result.body)).toEqual({
+      model: "claude-haiku-example",
+      stream: true,
+      messages: [{ role: "user", content: "hello" }],
+    });
+  });
+
+  test("keeps non-empty parents when stripping nested params", () => {
+    const result = rewriteMessagesBody(
+      JSON.stringify({
+        model: "claude-fable-example",
+        output_config: { effort: "medium", other: true },
+        messages: [{ role: "user", content: "hello" }],
+      }),
+      "claude-haiku-example",
+      ["output_config.effort"],
+    );
+
+    expect(JSON.parse(result.body)).toEqual({
+      model: "claude-haiku-example",
+      output_config: { other: true },
+      messages: [{ role: "user", content: "hello" }],
+    });
+  });
+
   test("passes through when rewrite model is not set", () => {
     const body = JSON.stringify({ model: "claude-sonnet-example" });
     const result = rewriteMessagesBody(body, null);
@@ -117,6 +177,7 @@ describe("serveSpikeProxy", () => {
       port: 0,
       upstream: upstream.url.toString(),
       rewriteModel: "claude-haiku-example",
+      stripParams: ["output_config.effort"],
     });
 
     try {
@@ -128,6 +189,7 @@ describe("serveSpikeProxy", () => {
         },
         body: JSON.stringify({
           model: "claude-sonnet-example",
+          output_config: { effort: "medium" },
           messages: [{ role: "user", content: "hello" }],
         }),
       });

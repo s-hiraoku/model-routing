@@ -3,6 +3,7 @@ type RewriteResult = {
   modelRequested: string | null;
   modelServed: string | null;
   rewritten: boolean;
+  strippedParams: string[];
   parseError: string | null;
 };
 
@@ -14,15 +15,61 @@ type SpikeProxyOptions = {
   port?: number;
   upstream: string;
   rewriteModel: string | null;
+  stripParams?: string[];
 };
 
-export function rewriteMessagesBody(rawBody: string, rewriteModel: string | null): RewriteResult {
-  if (!rewriteModel) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stripParamPath(target: Record<string, unknown>, paramPath: string): boolean {
+  const parts = paramPath.split(".").filter(Boolean);
+  if (parts.length === 0) {
+    return false;
+  }
+
+  const parents: Array<{ object: Record<string, unknown>; key: string }> = [];
+  let current = target;
+
+  for (const part of parts.slice(0, -1)) {
+    const next = current[part];
+    if (!isRecord(next)) {
+      return false;
+    }
+
+    parents.push({ object: current, key: part });
+    current = next;
+  }
+
+  const leaf = parts.at(-1);
+  if (!leaf || !Object.hasOwn(current, leaf)) {
+    return false;
+  }
+
+  delete current[leaf];
+
+  for (const parent of parents.reverse()) {
+    const child = parent.object[parent.key];
+    if (isRecord(child) && Object.keys(child).length === 0) {
+      delete parent.object[parent.key];
+    }
+  }
+
+  return true;
+}
+
+export function rewriteMessagesBody(
+  rawBody: string,
+  rewriteModel: string | null,
+  stripParams: string[] = [],
+): RewriteResult {
+  if (!rewriteModel && stripParams.length === 0) {
     return {
       body: rawBody,
       modelRequested: null,
       modelServed: null,
       rewritten: false,
+      strippedParams: [],
       parseError: null,
     };
   }
@@ -36,6 +83,7 @@ export function rewriteMessagesBody(rawBody: string, rewriteModel: string | null
         modelRequested: null,
         modelServed: null,
         rewritten: false,
+        strippedParams: [],
         parseError: "body is not a JSON object",
       };
     }
@@ -43,33 +91,40 @@ export function rewriteMessagesBody(rawBody: string, rewriteModel: string | null
     const messageBody = parsed as Record<string, unknown>;
     const modelRequested = typeof messageBody.model === "string" ? messageBody.model : null;
 
-    if (!modelRequested) {
+    if (rewriteModel && !modelRequested) {
       return {
         body: rawBody,
         modelRequested: null,
         modelServed: null,
         rewritten: false,
+        strippedParams: [],
         parseError: "body.model is not a string",
       };
     }
 
-    if (modelRequested === rewriteModel) {
+    const strippedParams = stripParams.filter((param) => stripParamPath(messageBody, param));
+
+    if (rewriteModel && modelRequested !== rewriteModel) {
+      messageBody.model = rewriteModel;
+    }
+
+    if (modelRequested === rewriteModel && strippedParams.length === 0) {
       return {
         body: rawBody,
         modelRequested,
         modelServed: modelRequested,
         rewritten: false,
+        strippedParams,
         parseError: null,
       };
     }
 
-    messageBody.model = rewriteModel;
-
     return {
       body: JSON.stringify(messageBody),
       modelRequested,
-      modelServed: rewriteModel,
+      modelServed: rewriteModel ?? modelRequested,
       rewritten: true,
+      strippedParams,
       parseError: null,
     };
   } catch (error) {
@@ -78,6 +133,7 @@ export function rewriteMessagesBody(rawBody: string, rewriteModel: string | null
       modelRequested: null,
       modelServed: null,
       rewritten: false,
+      strippedParams: [],
       parseError: error instanceof Error ? error.message : "failed to parse JSON body",
     };
   }
@@ -222,7 +278,12 @@ function buildLoggedClientResponse(upstreamResponse: Response): Response {
   });
 }
 
-async function proxyRequest(req: Request, upstreamBase: string, rewriteModel: string | null): Promise<Response> {
+async function proxyRequest(
+  req: Request,
+  upstreamBase: string,
+  rewriteModel: string | null,
+  stripParams: string[],
+): Promise<Response> {
   const url = new URL(req.url);
   const upstreamUrl = buildUpstreamUrl(req.url, upstreamBase);
   const headers = buildUpstreamHeaders(req.headers, upstreamBase);
@@ -233,13 +294,16 @@ async function proxyRequest(req: Request, upstreamBase: string, rewriteModel: st
     const rawBody = await req.text();
 
     if (req.method === "POST" && url.pathname === "/v1/messages") {
-      const rewrite = rewriteMessagesBody(rawBody, rewriteModel);
+      const rewrite = rewriteMessagesBody(rawBody, rewriteModel, stripParams);
       body = rewrite.body;
 
       if (rewrite.parseError) {
         console.warn(`[spike] /v1/messages parse warning: ${rewrite.parseError}; passing through`);
       } else if (rewrite.rewritten) {
         console.info(`[spike] rewrote model: ${rewrite.modelRequested} -> ${rewrite.modelServed}`);
+        if (rewrite.strippedParams.length > 0) {
+          console.info(`[spike] stripped params: ${rewrite.strippedParams.join(", ")}`);
+        }
       } else {
         console.info(`[spike] passed through model: ${rewrite.modelRequested ?? "unknown"}`);
       }
@@ -277,13 +341,20 @@ function envNumber(name: string, fallback: number): number {
   return parsed;
 }
 
+function envList(name: string): string[] {
+  return (Bun.env[name] ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export function serveSpikeProxy(options: SpikeProxyOptions) {
   return Bun.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? DEFAULT_PORT,
     async fetch(req) {
       try {
-        return await proxyRequest(req, options.upstream, options.rewriteModel);
+        return await proxyRequest(req, options.upstream, options.rewriteModel, options.stripParams ?? []);
       } catch (error) {
         const message = error instanceof Error ? error.message : "unknown gateway error";
         console.error(`[spike] gateway error: ${message}`);
@@ -297,12 +368,14 @@ function startServer(): void {
   const port = envNumber("PORT", DEFAULT_PORT);
   const upstream = Bun.env.UPSTREAM ?? DEFAULT_UPSTREAM;
   const rewriteModel = Bun.env.REWRITE_MODEL ?? null;
+  const stripParams = envList("STRIP_PARAMS");
 
-  serveSpikeProxy({ port, upstream, rewriteModel });
+  serveSpikeProxy({ port, upstream, rewriteModel, stripParams });
 
   console.info(`[spike] listening on http://127.0.0.1:${port}`);
   console.info(`[spike] upstream: ${upstream}`);
   console.info(`[spike] rewrite model: ${rewriteModel ?? "(disabled; passthrough)"}`);
+  console.info(`[spike] strip params: ${stripParams.length > 0 ? stripParams.join(", ") : "(none)"}`);
 }
 
 if (import.meta.main) {

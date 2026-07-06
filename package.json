@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "db:generate": "drizzle-kit generate",
     "db-init": "bun scripts/db-init.ts",
     "gateway": "bun packages/gateway/src/main.ts",
     "lint": "biome check .",

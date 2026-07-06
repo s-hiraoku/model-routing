@@ -5,6 +5,7 @@ import { z } from "zod";
 const tierConfigSchema = z.object({
   model: z.string().min(1),
   match: z.array(z.string().min(1)),
+  strip_params: z.array(z.string().min(1)).default([]),
 });
 
 export const modelsConfigSchema = z.object({

@@ -38,9 +38,20 @@ Outcome:
 Notes:
 
 - The spike proxy is intentionally minimal and lives at `scripts/spike-rewrite.ts`.
-- It binds only to `127.0.0.1`, preserves request headers except for upstream `host` and recalculated body length, and rewrites only the top-level `model` field for `POST /v1/messages`.
+- It binds only to `127.0.0.1`, preserves request headers except for upstream `host` and recalculated body length, and can rewrite the top-level `model` field for `POST /v1/messages`.
 - A first run exposed a proxy false-negative risk: Bun returned a decoded response body while preserving compression headers, causing Claude Code `Decompression error: ZlibError`. The spike proxy now removes `content-encoding`, `content-length`, and `transfer-encoding` from client responses.
 - The proxy now logs `/v1/messages` response model values from JSON or SSE `message_start` events without logging response bodies.
+
+## 2026-07-06: Haiku demotion compatibility follow-up
+
+Status: compatible with parameter stripping
+
+Outcome:
+
+- Claude Code 2.1.201 sends the Haiku-incompatible effort setting as `output_config.effort`, not as a top-level `effort` field.
+- Rewriting `claude-fable-5` to `claude-haiku-4-5-20251001` while stripping only top-level `effort` still failed with provider status 400.
+- Rewriting `claude-fable-5` to `claude-haiku-4-5-20251001` while stripping `output_config.effort` completed normally. The response model logged by the proxy was `claude-haiku-4-5-20251001`.
+- Route decision: keep M0 production gateway passthrough-only, but model-specific request compatibility is viable. M4 shifting must apply `tiers.<tier>.strip_params` before sending a rewritten request and must still fall back through the degrade guard on rewrite-caused 4xx.
 
 ## 2026-07-06: M0 code completion
 

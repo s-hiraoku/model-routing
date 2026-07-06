@@ -12,6 +12,8 @@ tiers:
     model: claude-haiku-4-5-20251001
     match:
       - claude-haiku-*
+    strip_params:
+      - output_config.effort
 
 never_touch:
   - claude-haiku-*
@@ -19,4 +21,3 @@ never_touch:
 subscription:
   window_hours: 5
   eval_runs_per_window: 20
-

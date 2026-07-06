@@ -86,6 +86,7 @@ tiers:
   low:
     model: claude-haiku-4-5-20251001
     match: ["claude-haiku-*"]
+    strip_params: ["output_config.effort"] # この tier へ書き換える時に除去する非互換 request field
 
 # Claude Code が雑務(タイトル生成等)に使う低モデル指定には一切介入しない
 never_touch:
@@ -96,7 +97,7 @@ subscription:
   eval_runs_per_window: 20  # 評価バッチが 1 ウィンドウで使ってよい実行数
 ```
 
-> モデル ID・ウィンドウ仕様は**実装時に最新ドキュメントで確認**して埋める。次期モデルが出たら `tiers.*.model` を差し替えるだけで移行できる構造にする。
+> モデル ID・ウィンドウ仕様・モデル別 request field 互換性は**実装時に最新ドキュメントと実機で確認**して埋める。次期モデルが出たら `tiers.*.model` と必要な `strip_params` を差し替えるだけで移行できる構造にする。
 
 ### config/eval.yaml(評価設定)
 

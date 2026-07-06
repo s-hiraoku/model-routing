@@ -10,6 +10,7 @@ describe("loadModelsConfig", () => {
 
     expect(config.tiers.high.model).toBe("claude-opus-4-8");
     expect(config.tiers.mid.match).toContain("claude-fable-*");
+    expect(config.tiers.low.strip_params).toEqual(["output_config.effort"]);
     expect(config.never_touch).toContain("claude-haiku-*");
   });
 

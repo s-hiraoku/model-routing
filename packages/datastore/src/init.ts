@@ -1,83 +1,72 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 
-const schemaSql = `
-CREATE TABLE IF NOT EXISTS sessions (
-  id            TEXT PRIMARY KEY,
-  cwd           TEXT,
-  git_remote    TEXT,
-  first_seen_at INTEGER NOT NULL,
-  last_seen_at  INTEGER NOT NULL,
-  request_count INTEGER NOT NULL DEFAULT 0
-);
+const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../drizzle");
+const m0Tables = ["sessions", "task_events", "requests", "shift_events", "quota_events"];
+const m0Indexes = [
+  "idx_task_events_created",
+  "idx_task_events_category",
+  "idx_requests_created",
+  "idx_requests_session",
+  "idx_requests_replay",
+  "idx_quota_window",
+];
 
-CREATE TABLE IF NOT EXISTS task_events (
-  id            TEXT PRIMARY KEY,
-  session_id    TEXT NOT NULL REFERENCES sessions(id),
-  created_at    INTEGER NOT NULL,
-  cwd           TEXT NOT NULL,
-  git_head      TEXT,
-  git_dirty     INTEGER NOT NULL,
-  prompt_text   TEXT NOT NULL,
-  prompt_hash   TEXT NOT NULL,
-  task_category TEXT,
-  category_source TEXT,
-  category_confidence REAL,
-  self_contained  INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_task_events_created ON task_events(created_at);
-CREATE INDEX IF NOT EXISTS idx_task_events_category ON task_events(task_category, created_at);
+type DrizzleJournal = {
+  entries: Array<{
+    when: number;
+  }>;
+};
 
-CREATE TABLE IF NOT EXISTS requests (
-  id               TEXT PRIMARY KEY,
-  session_id       TEXT REFERENCES sessions(id),
-  replay_run_id    TEXT,
-  created_at       INTEGER NOT NULL,
-  model_requested  TEXT NOT NULL,
-  model_served     TEXT NOT NULL,
-  is_streaming     INTEGER NOT NULL,
-  message_count    INTEGER NOT NULL,
-  tool_count       INTEGER NOT NULL,
-  has_tool_results INTEGER NOT NULL,
-  has_images       INTEGER NOT NULL,
-  system_hash      TEXT,
-  prompt_hash      TEXT NOT NULL,
-  input_tokens     INTEGER,
-  output_tokens    INTEGER,
-  cache_read_tokens  INTEGER,
-  cache_write_tokens INTEGER,
-  status           TEXT NOT NULL,
-  http_status      INTEGER,
-  stop_reason      TEXT,
-  latency_ms       INTEGER,
-  ttft_ms          INTEGER,
-  error_message    TEXT,
-  body_path        TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_at);
-CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_requests_replay ON requests(replay_run_id);
+function hasTable(db: Database, name: string): boolean {
+  return Boolean(
+    db.query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name),
+  );
+}
 
-CREATE TABLE IF NOT EXISTS shift_events (
-  request_id      TEXT PRIMARY KEY REFERENCES requests(id),
-  created_at      INTEGER NOT NULL,
-  policy_version  TEXT NOT NULL,
-  task_event_id   TEXT REFERENCES task_events(id),
-  decided_category TEXT,
-  gear_from       TEXT NOT NULL,
-  gear_to         TEXT NOT NULL,
-  reason          TEXT NOT NULL
-);
+function hasIndex(db: Database, name: string): boolean {
+  return Boolean(
+    db.query<{ name: string }, [string]>("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?").get(name),
+  );
+}
 
-CREATE TABLE IF NOT EXISTS quota_events (
-  id           TEXT PRIMARY KEY,
-  created_at   INTEGER NOT NULL,
-  kind         TEXT NOT NULL,
-  ref_id       TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_quota_window ON quota_events(created_at);
-`;
+function hasLegacyM0Schema(db: Database): boolean {
+  return m0Tables.every((table) => hasTable(db, table)) && m0Indexes.every((indexName) => hasIndex(db, indexName));
+}
+
+function latestMigrationTimestamp(): number {
+  const journalPath = join(migrationsFolder, "meta/_journal.json");
+  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as DrizzleJournal;
+  const latest = journal.entries.at(-1);
+
+  if (!latest) {
+    throw new Error(`No Drizzle migrations found in ${journalPath}`);
+  }
+
+  return latest.when;
+}
+
+function markLegacyM0MigrationApplied(db: Database): void {
+  if (hasTable(db, "__drizzle_migrations") || !hasLegacyM0Schema(db)) {
+    return;
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at numeric
+    );
+  `);
+  db.query("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)").run(
+    "legacy-m0-bootstrap",
+    latestMigrationTimestamp(),
+  );
+}
 
 export function initializeDatabase(path: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -86,7 +75,8 @@ export function initializeDatabase(path: string): void {
   try {
     db.exec("PRAGMA journal_mode = WAL;");
     db.exec("PRAGMA busy_timeout = 5000;");
-    db.exec(schemaSql);
+    markLegacyM0MigrationApplied(db);
+    migrate(drizzle(db), { migrationsFolder });
   } finally {
     db.close();
   }
