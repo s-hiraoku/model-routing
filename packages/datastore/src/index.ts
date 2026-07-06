@@ -36,3 +36,4 @@ export {
   updateTaskClassification,
   upsertSession,
 } from "./task-events";
+export { listTierProfilesByBatch, type TierProfileRow, upsertTierProfile } from "./tier-profiles";

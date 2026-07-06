@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { defaultDatabasePath, initializeDatabase, listEvalTasksByBatch } from "@model-routing/datastore";
 import { loadEvalConfig, loadModelsConfig } from "@model-routing/shared";
+import { runAggregateStage } from "./aggregate";
 import { formatAuditTasks, listAuditTasks } from "./audit";
 import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
 import { runJudgeStage } from "./judge";
+import { runReportStage } from "./policy";
 import { runReplayStage } from "./replay";
 import { formatM1Report, getM1Report } from "./report";
 import { estimateRuns, sampleTasks } from "./sample";
@@ -72,7 +74,7 @@ function flagBoolean(args: ParsedArgs, name: string): boolean {
 function usage(): string {
   return [
     "Usage:",
-    "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|all [--llm] [--yes]",
+    "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|aggregate|report|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
     "  bun run evals -- audit-classify --n 50",
     "  bun run evals -- report",
@@ -154,6 +156,26 @@ async function commandRun(args: ParsedArgs): Promise<void> {
     });
     console.info(
       `judge: tasks=${result.tasks} inserted=${result.insertedJudgments} skipped=${result.skippedJudgments} missing_baselines=${result.missingBaselines}`,
+    );
+  }
+
+  if (stage === "aggregate" || stage === "all") {
+    const result = runAggregateStage({ dbPath, batchId, config });
+    console.info(`aggregate: profiles=${result.profiles}`);
+  }
+
+  if (stage === "report" || stage === "all") {
+    const policyOut = flagString(args, "policy-out", `data/policies/shift-policy-${batchId}.yaml`);
+    const result = await runReportStage({
+      dbPath,
+      batchId,
+      config,
+      reportDir: flagString(args, "report-dir", "data/reports"),
+      policyOut,
+      existingPolicyPath: flagString(args, "existing-policy", ""),
+    });
+    console.info(
+      `report: profiles=${result.profiles} report=${result.reportPath} policy=${result.policyPath} changelog=${result.changelogPath}`,
     );
   }
 

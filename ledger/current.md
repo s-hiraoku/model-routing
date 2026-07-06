@@ -34,10 +34,10 @@ Success criteria:
 - [x] Add minimal review-ui queue/comparison pages
 - [x] Integrate gateway variant seam without enabling production shifting
 - [x] Run verification, commit, and push M2 slice
-- [ ] Add aggregate stage and Wilson CI helpers
-- [ ] Add Markdown report and policy generation stage
-- [ ] Add policy changelog persistence or generated changelog output
-- [ ] Update docs/README for M3 commands
+- [x] Add aggregate stage and Wilson CI helpers
+- [x] Add Markdown report and policy generation stage
+- [x] Add policy changelog persistence or generated changelog output
+- [x] Update docs/README for M3 commands
 - [ ] Run verification, commit, and push M3 slice
 
 ## Notes
@@ -54,3 +54,4 @@ Success criteria:
 - 2026-07-06: Added minimal Hono JSX Review UI with queue, blind compare, review POST storage, reveal page, keyboard submit script, and datastore review queue repositories/tests. Gateway variant seam remains for M2.
 - 2026-07-06: Added gateway replay variant seam with `/internal/replay-begin` and `/internal/replay-end`, localhost-only `X-MR-Variant` handling, `mid+demote` agent-step demotion through shifter, request replay_run_id logging, and shift_events insertion.
 - 2026-07-06: M2 implementation slices pushed through `f1585cf`. Verification passed: `bun test` (70 pass), `bun run lint`, and empty-DB replay CLI. M2 operational gate remains external: run a real batch, review at least 20 pairs, and check 4-variant completion plus human-judge κ. M3 implementation started.
+- 2026-07-06: Added M3 aggregate stage with Wilson CI, human review overrides, judge-human κ, `tier_profiles` schema/repository, plus report and conservative shift-policy generation from thresholds while preserving overrides.

@@ -36,6 +36,7 @@ describe("initializeDatabase", () => {
           "sessions",
           "shift_events",
           "task_events",
+          "tier_profiles",
         ]);
         expect(indexes).toContain("idx_requests_created");
         expect(indexes).toContain("idx_task_events_created");
@@ -59,7 +60,7 @@ describe("initializeDatabase", () => {
       const db = new Database(dbPath, { readonly: true });
       try {
         expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM __drizzle_migrations").get()?.count).toBe(
-          4,
+          5,
         );
       } finally {
         db.close();

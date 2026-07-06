@@ -169,6 +169,26 @@ export const humanReviews = sqliteTable(
   (table) => [index("idx_human_reviews_task").on(table.evalTaskId)],
 );
 
+export const tierProfiles = sqliteTable(
+  "tier_profiles",
+  {
+    batchId: text("batch_id").notNull(),
+    variant: text("variant").notNull(),
+    taskCategory: text("task_category").notNull(),
+    n: integer("n").notNull(),
+    winRate: real("win_rate").notNull(),
+    wilsonLow: real("wilson_low").notNull(),
+    wilsonHigh: real("wilson_high").notNull(),
+    verifyPassRate: real("verify_pass_rate"),
+    avgTurns: real("avg_turns"),
+    avgTotalTokens: real("avg_total_tokens"),
+    avgDurationMs: real("avg_duration_ms"),
+    errorRate: real("error_rate").notNull(),
+    judgeHumanKappa: real("judge_human_kappa"),
+  },
+  (table) => [uniqueIndex("idx_tier_profiles_pk").on(table.batchId, table.variant, table.taskCategory)],
+);
+
 export const quotaEvents = sqliteTable(
   "quota_events",
   {
