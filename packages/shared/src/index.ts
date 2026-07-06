@@ -18,6 +18,31 @@ export interface RequestFeatures {
   lastUserText: string;
 }
 
+export type HeuristicClassification = {
+  category: TaskCategory;
+  confidence: number;
+};
+
+export function classifyHeuristic(promptText: string): HeuristicClassification {
+  const rules: Array<[RegExp, TaskCategory]> = [
+    [/レビュー|review/i, "review"],
+    [/テスト.*(書|作|追加)|test/i, "test"],
+    [/(エラー|error|落ち|動かない|直らない|stack ?trace)/i, "debug"],
+    [/(設計|方針|アーキテクチャ|どうすべき|計画|plan)/i, "plan"],
+    [/(README|ドキュメント|コメント|コミットメッセージ)/i, "docs"],
+    [/(リファクタ|直して|修正|変更|リネーム|移動)/i, "code_edit"],
+    [/(実装|作って|追加して|新規)/i, "code_gen"],
+  ];
+
+  for (const [pattern, category] of rules) {
+    if (pattern.test(promptText)) {
+      return { category, confidence: 0.8 };
+    }
+  }
+
+  return { category: "unknown", confidence: 0 };
+}
+
 export function sanitizeResponseHeaders(headers: Headers): Headers {
   const sanitized = new Headers(headers);
 

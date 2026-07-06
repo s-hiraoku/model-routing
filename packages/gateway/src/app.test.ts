@@ -236,4 +236,47 @@ describe("gateway app", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  test("records internal task events with heuristic classification", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-task-event-api-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+
+    try {
+      const app = createGatewayApp({
+        upstream: "http://127.0.0.1:1",
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+      });
+
+      const response = await app.request("http://127.0.0.1/internal/task-event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          session_id: "session-1",
+          cwd: "/repo",
+          git_head: "abc123",
+          git_dirty: false,
+          git_remote: "git@example.com/repo.git",
+          prompt: "README を更新して",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect((await response.json()) as { task_category?: string }).toHaveProperty("task_category", "docs");
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        expect(db.query<{ id: string }, []>("SELECT id FROM sessions").get()).toEqual({ id: "session-1" });
+        expect(db.query<{ task_category: string }, []>("SELECT task_category FROM task_events").get()).toEqual({
+          task_category: "docs",
+        });
+      } finally {
+        db.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

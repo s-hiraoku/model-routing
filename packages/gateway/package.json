@@ -9,6 +9,7 @@
   "dependencies": {
     "@model-routing/datastore": "workspace:*",
     "@model-routing/shared": "workspace:*",
-    "hono": "^4.12.27"
+    "hono": "^4.12.27",
+    "zod": "^4.4.3"
   }
 }

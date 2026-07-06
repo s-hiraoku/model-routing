@@ -4,10 +4,20 @@ import {
   getGatewayStats,
   initializeDatabase,
   insertRequestLog,
+  insertTaskEvent,
+  upsertSession,
   writeZstdJson,
 } from "@model-routing/datastore";
-import { buildClientResponse, type GatewayMode, resolveGatewayMode, uuidv7 } from "@model-routing/shared";
+import {
+  buildClientResponse,
+  classifyHeuristic,
+  type GatewayMode,
+  resolveGatewayMode,
+  sha256Hex,
+  uuidv7,
+} from "@model-routing/shared";
 import { Hono } from "hono";
+import { z } from "zod";
 import { extractRequestFeatures } from "./features";
 
 export type GatewayOptions = {
@@ -176,6 +186,15 @@ function gatewayErrorResponse(error: unknown): Response {
   return Response.json({ error: message }, { status: 502 });
 }
 
+const taskEventSchema = z.object({
+  session_id: z.string().min(1),
+  cwd: z.string().min(1),
+  prompt: z.string().min(1),
+  git_head: z.string().nullable().optional(),
+  git_dirty: z.boolean().optional(),
+  git_remote: z.string().nullable().optional(),
+});
+
 async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<Response> {
   let upstreamResponse: Response;
 
@@ -286,6 +305,48 @@ export function createGatewayApp(options: GatewayOptions): Hono {
     }
 
     return c.json(getGatewayStats(resolvedOptions.dbPath));
+  });
+
+  app.post("/internal/task-event", async (c) => {
+    if (!resolvedOptions.enableLogging) {
+      return c.json({ error: "logging disabled" }, 503);
+    }
+
+    const parsed = taskEventSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "invalid task event" }, 400);
+    }
+
+    const now = Date.now();
+    const eventId = uuidv7();
+    const classification = classifyHeuristic(parsed.data.prompt);
+
+    upsertSession(resolvedOptions.dbPath, {
+      id: parsed.data.session_id,
+      cwd: parsed.data.cwd,
+      gitRemote: parsed.data.git_remote ?? null,
+      seenAt: now,
+    });
+    insertTaskEvent(resolvedOptions.dbPath, {
+      id: eventId,
+      sessionId: parsed.data.session_id,
+      createdAt: now,
+      cwd: parsed.data.cwd,
+      gitHead: parsed.data.git_head ?? null,
+      gitDirty: parsed.data.git_dirty ?? false,
+      promptText: parsed.data.prompt,
+      promptHash: sha256Hex(parsed.data.prompt),
+      taskCategory: classification.category,
+      categorySource: "heuristic",
+      categoryConfidence: classification.confidence,
+      selfContained: null,
+    });
+
+    return c.json({
+      id: eventId,
+      task_category: classification.category,
+      category_confidence: classification.confidence,
+    });
   });
 
   app.post("/v1/messages", (c) => {
