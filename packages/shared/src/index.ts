@@ -38,3 +38,11 @@ export function buildClientResponse(
     headers: sanitizeResponseHeaders(upstreamResponse.headers),
   });
 }
+
+export function uuidv7(): string {
+  return Bun.randomUUIDv7();
+}
+
+export function sha256Hex(value: string): string {
+  return new Bun.CryptoHasher("sha256").update(value).digest("hex");
+}

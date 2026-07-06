@@ -28,6 +28,7 @@
       "name": "@model-routing/gateway",
       "version": "0.0.0",
       "dependencies": {
+        "@model-routing/datastore": "workspace:*",
         "@model-routing/shared": "workspace:*",
         "hono": "^4.12.27",
       },

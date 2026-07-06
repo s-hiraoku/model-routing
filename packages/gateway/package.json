@@ -7,6 +7,7 @@
     "start": "bun src/main.ts"
   },
   "dependencies": {
+    "@model-routing/datastore": "workspace:*",
     "@model-routing/shared": "workspace:*",
     "hono": "^4.12.27"
   }

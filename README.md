@@ -91,7 +91,7 @@ bun install
 bun run db-init
 bun test
 bun run lint
-bun run gateway              # localhost:8484, passthrough gateway skeleton
+bun run gateway              # localhost:8484, passthrough + /v1/messages metadata logging
 ```
 
 ## 使い方(M0 完了後)
