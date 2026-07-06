@@ -3,17 +3,16 @@
 Goal: Complete the planned model-routing implementation beyond M0, progressing milestone by milestone from M1 through M5 where feasible, with durable ledger updates, tests, docs, commits, and pushes after completed slices.
 Owner: Codex
 Started: 2026-07-06
-Status: M2 in progress
+Status: M3 in progress
 
-## Current Milestone: M2 Replay, Judge, and Review UI
+## Current Milestone: M3 Aggregate, Report, and Policy Generation
 
 Success criteria:
 
-- `packages/shifter` implements deterministic decision logic for agent_step, sticky task gear, and hold fallbacks.
-- `datastore` includes `replay_runs`, `judgments`, and `human_reviews` via Drizzle migration and repositories/tests.
-- `evals` can execute replay/judge stage skeletons idempotently against stored tasks/runs.
-- Gateway has a safe seam for variant-specific shifter instances without changing passthrough default behavior.
-- Review UI has the minimum queue/comparison storage path needed for human reviews.
+- `evals` aggregates judgments by category and variant, using human_reviews as the authoritative override.
+- Wilson confidence intervals, verify pass rate, average turns, token totals, and error rate are reported per category/variant.
+- `shift-policy.yaml` can be generated from thresholds while preserving manual overrides.
+- Markdown batch reports are written under `data/reports/`.
 - Repository verification passes before each pushed slice.
 
 ## Plan
@@ -34,7 +33,12 @@ Success criteria:
 - [x] Add judge skeleton and pairwise prompt
 - [x] Add minimal review-ui queue/comparison pages
 - [x] Integrate gateway variant seam without enabling production shifting
-- [ ] Run verification, commit, and push M2 slice
+- [x] Run verification, commit, and push M2 slice
+- [ ] Add aggregate stage and Wilson CI helpers
+- [ ] Add Markdown report and policy generation stage
+- [ ] Add policy changelog persistence or generated changelog output
+- [ ] Update docs/README for M3 commands
+- [ ] Run verification, commit, and push M3 slice
 
 ## Notes
 
@@ -49,3 +53,4 @@ Success criteria:
 - 2026-07-06: Added judge stage skeleton with pairwise-v1 prompt, schema-enforced Agent SDK judge output, position swapping, before-context extraction, idempotent judgment insertion, and tests. Review UI and gateway variant seam remain for M2.
 - 2026-07-06: Added minimal Hono JSX Review UI with queue, blind compare, review POST storage, reveal page, keyboard submit script, and datastore review queue repositories/tests. Gateway variant seam remains for M2.
 - 2026-07-06: Added gateway replay variant seam with `/internal/replay-begin` and `/internal/replay-end`, localhost-only `X-MR-Variant` handling, `mid+demote` agent-step demotion through shifter, request replay_run_id logging, and shift_events insertion.
+- 2026-07-06: M2 implementation slices pushed through `f1585cf`. Verification passed: `bun test` (70 pass), `bun run lint`, and empty-DB replay CLI. M2 operational gate remains external: run a real batch, review at least 20 pairs, and check 4-variant completion plus human-judge κ. M3 implementation started.
