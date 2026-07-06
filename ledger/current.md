@@ -48,6 +48,7 @@ Success criteria:
 - [x] Add policy rollback CLI
 - [x] Add `feedback_notes` schema and repository
 - [x] Add feedback CLI add/list
+- [x] Add `skills/model-feedback/SKILL.md`
 - [x] Add `preference_queue` schema and feedback stage enqueue
 - [x] Add Review UI push queue and answered preference tracking
 - [x] Expire stale preference queue items during feedback stage
@@ -74,6 +75,7 @@ Success criteria:
 - 2026-07-06: M4 implementation slices pushed through `a6bef4e`. Verification passed: `bun test` (77 pass) and `bun run lint`. M4 operational gate remains external: run shifting for staged windows and compare quality/error/cache metrics.
 - 2026-07-06: Added M5 foundations: feedback config loader, nightly Markdown report for correction-like tasks / unknown models / shifted errors, and policy rollback CLI.
 - 2026-07-06: Added `feedback_notes` persistence and `bun run feedback -- add/list` so freeform human feedback can be captured before stage 7 interpretation is wired in.
+- 2026-07-06: Added `skills/model-feedback/SKILL.md` as the thin wrapper for storing freeform feedback with source `model-feedback`.
 - 2026-07-06: Added `preference_queue` persistence and `bun run evals -- run --stage feedback` to enqueue blind A/B preference prompts within the weekly attention budget.
 - 2026-07-06: Added Review UI `/push` flow so preference prompts can be answered as `human_reviews(source='push')` and linked back to `preference_queue`.
 - 2026-07-06: Added preference queue expiration during feedback stage so stale prompts release weekly attention budget.

@@ -120,7 +120,7 @@
 - [ ] `feedback.yaml`(注意予算・通知・変更統治)+ config ローダー
 - [ ] stage 7: A/B 選好キュー生成(優先度 = 影響度 × 不確実性)、週 3 問の予算管理、期限切れ処理 (`preference_queue` への予算内 enqueue と期限切れ更新は実装済み)
 - [ ] 通知フロー: osascript → review-ui クイック比較 → human_reviews(source='push') (`/push` queue と回答反映は実装済み)
-- [ ] `bun run feedback -- add` CLI + `skills/model-feedback/SKILL.md` (`add` / `list` と `feedback_notes` 保存口は実装済み)
+- [x] `bun run feedback -- add` CLI + `skills/model-feedback/SKILL.md` (`add` / `list` と `feedback_notes` 保存口は実装済み)
 - [ ] フィードバック取り込み: LLM 解釈(parsed_json)→ 変更案生成 → review-ui 提案ページで承認/却下 → 反映 + changelog(origin: human_feedback)
 - [ ] 満足度チェック(月 1 問): 通知 → 満足度ページ → 「止めたい」は即 passthrough 化
 - [ ] `bun run policy -- rollback <version>`(即時巻き戻し)
