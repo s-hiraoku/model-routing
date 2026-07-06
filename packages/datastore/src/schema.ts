@@ -100,6 +100,75 @@ export const evalTasks = sqliteTable(
   (table) => [index("idx_eval_tasks_batch").on(table.batchId, table.status)],
 );
 
+export const replayRuns = sqliteTable(
+  "replay_runs",
+  {
+    id: text("id").primaryKey(),
+    evalTaskId: text("eval_task_id")
+      .notNull()
+      .references(() => evalTasks.id),
+    variant: text("variant").notNull(),
+    createdAt: integer("created_at").notNull(),
+    status: text("status").notNull(),
+    durationMs: integer("duration_ms"),
+    turns: integer("turns"),
+    totalInputTokens: integer("total_input_tokens"),
+    totalOutputTokens: integer("total_output_tokens"),
+    totalCacheRead: integer("total_cache_read"),
+    diffPath: text("diff_path"),
+    diffStat: text("diff_stat"),
+    finalMessagePath: text("final_message_path"),
+    verifyPassed: integer("verify_passed"),
+    errorMessage: text("error_message"),
+  },
+  (table) => [index("idx_replay_runs_task").on(table.evalTaskId, table.variant)],
+);
+
+export const judgments = sqliteTable(
+  "judgments",
+  {
+    id: text("id").primaryKey(),
+    evalTaskId: text("eval_task_id")
+      .notNull()
+      .references(() => evalTasks.id),
+    candidateRunId: text("candidate_run_id")
+      .notNull()
+      .references(() => replayRuns.id),
+    baselineRunId: text("baseline_run_id")
+      .notNull()
+      .references(() => replayRuns.id),
+    position: text("position").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    createdAt: integer("created_at").notNull(),
+    verdict: text("verdict").notNull(),
+    scoresJson: text("scores_json"),
+    rationale: text("rationale"),
+  },
+  (table) => [index("idx_judgments_task").on(table.evalTaskId, table.candidateRunId, table.position)],
+);
+
+export const humanReviews = sqliteTable(
+  "human_reviews",
+  {
+    id: text("id").primaryKey(),
+    evalTaskId: text("eval_task_id")
+      .notNull()
+      .references(() => evalTasks.id),
+    candidateRunId: text("candidate_run_id")
+      .notNull()
+      .references(() => replayRuns.id),
+    baselineRunId: text("baseline_run_id")
+      .notNull()
+      .references(() => replayRuns.id),
+    createdAt: integer("created_at").notNull(),
+    source: text("source").notNull().default("review_session"),
+    verdict: text("verdict").notNull(),
+    note: text("note"),
+    reviewSeconds: integer("review_seconds"),
+  },
+  (table) => [index("idx_human_reviews_task").on(table.evalTaskId)],
+);
+
 export const quotaEvents = sqliteTable(
   "quota_events",
   {

@@ -10,6 +10,16 @@ export {
 } from "./eval-tasks";
 export { defaultDatabasePath, initializeDatabase } from "./init";
 export { insertQuotaEvent, type QuotaEventRow } from "./quota-events";
+export {
+  type HumanReviewRow,
+  insertHumanReview,
+  insertJudgment,
+  insertReplayRun,
+  type JudgmentRow,
+  listReplayRunsForTask,
+  type ReplayRunInsert,
+  type ReplayRunRow,
+} from "./replay";
 export { insertRequestLog, type RequestLogRow } from "./requests";
 export * from "./schema";
 export { type GatewayStats, getGatewayStats } from "./stats";

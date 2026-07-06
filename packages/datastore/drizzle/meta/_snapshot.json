@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "393b49d6-bd40-442c-81ed-8b6fef7290ce",
+  "id": "4353e0f2-dd9c-46bd-b3f2-a2dca944e2e5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "eval_tasks": {
@@ -101,6 +101,228 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "human_reviews": {
+      "name": "human_reviews",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "eval_task_id": {
+          "name": "eval_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_run_id": {
+          "name": "candidate_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "baseline_run_id": {
+          "name": "baseline_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'review_session'"
+        },
+        "verdict": {
+          "name": "verdict",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "review_seconds": {
+          "name": "review_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_human_reviews_task": {
+          "name": "idx_human_reviews_task",
+          "columns": ["eval_task_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "human_reviews_eval_task_id_eval_tasks_id_fk": {
+          "name": "human_reviews_eval_task_id_eval_tasks_id_fk",
+          "tableFrom": "human_reviews",
+          "tableTo": "eval_tasks",
+          "columnsFrom": ["eval_task_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "human_reviews_candidate_run_id_replay_runs_id_fk": {
+          "name": "human_reviews_candidate_run_id_replay_runs_id_fk",
+          "tableFrom": "human_reviews",
+          "tableTo": "replay_runs",
+          "columnsFrom": ["candidate_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "human_reviews_baseline_run_id_replay_runs_id_fk": {
+          "name": "human_reviews_baseline_run_id_replay_runs_id_fk",
+          "tableFrom": "human_reviews",
+          "tableTo": "replay_runs",
+          "columnsFrom": ["baseline_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "judgments": {
+      "name": "judgments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "eval_task_id": {
+          "name": "eval_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_run_id": {
+          "name": "candidate_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "baseline_run_id": {
+          "name": "baseline_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt_version": {
+          "name": "prompt_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verdict": {
+          "name": "verdict",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scores_json": {
+          "name": "scores_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rationale": {
+          "name": "rationale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_judgments_task": {
+          "name": "idx_judgments_task",
+          "columns": ["eval_task_id", "candidate_run_id", "position"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "judgments_eval_task_id_eval_tasks_id_fk": {
+          "name": "judgments_eval_task_id_eval_tasks_id_fk",
+          "tableFrom": "judgments",
+          "tableTo": "eval_tasks",
+          "columnsFrom": ["eval_task_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "judgments_candidate_run_id_replay_runs_id_fk": {
+          "name": "judgments_candidate_run_id_replay_runs_id_fk",
+          "tableFrom": "judgments",
+          "tableTo": "replay_runs",
+          "columnsFrom": ["candidate_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "judgments_baseline_run_id_replay_runs_id_fk": {
+          "name": "judgments_baseline_run_id_replay_runs_id_fk",
+          "tableFrom": "judgments",
+          "tableTo": "replay_runs",
+          "columnsFrom": ["baseline_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "quota_events": {
       "name": "quota_events",
       "columns": {
@@ -141,6 +363,137 @@
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "replay_runs": {
+      "name": "replay_runs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "eval_task_id": {
+          "name": "eval_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "variant": {
+          "name": "variant",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "turns": {
+          "name": "turns",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "total_input_tokens": {
+          "name": "total_input_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "total_output_tokens": {
+          "name": "total_output_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "total_cache_read": {
+          "name": "total_cache_read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "diff_path": {
+          "name": "diff_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "diff_stat": {
+          "name": "diff_stat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "final_message_path": {
+          "name": "final_message_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "verify_passed": {
+          "name": "verify_passed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_replay_runs_task": {
+          "name": "idx_replay_runs_task",
+          "columns": ["eval_task_id", "variant"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "replay_runs_eval_task_id_eval_tasks_id_fk": {
+          "name": "replay_runs_eval_task_id_eval_tasks_id_fk",
+          "tableFrom": "replay_runs",
+          "tableTo": "eval_tasks",
+          "columnsFrom": ["eval_task_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

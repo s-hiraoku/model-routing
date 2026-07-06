@@ -3,19 +3,18 @@
 Goal: Complete the planned model-routing implementation beyond M0, progressing milestone by milestone from M1 through M5 where feasible, with durable ledger updates, tests, docs, commits, and pushes after completed slices.
 Owner: Codex
 Started: 2026-07-06
-Status: M1 in progress
+Status: M2 in progress
 
-## Current Milestone: M1 Classification, Sampling, and Log Exploration
+## Current Milestone: M2 Replay, Judge, and Review UI
 
 Success criteria:
 
-- `packages/evals` exists with an idempotent stage runner and CLI entrypoint.
-- `datastore` includes `eval_tasks` via Drizzle schema and generated migration, with repositories/tests.
-- Stage 1 classify can update task categories and self-contained flags, using heuristic logic locally and an Agent SDK seam for LLM classification.
-- Stage 2 sample can create `eval_tasks` with dedup, dirty filtering, per-category limits, and quota estimate output.
-- `audit-classify` CLI can display recent classified tasks for manual spot checks.
-- `bun run smoke` provides the Agent SDK/gateway connectivity check seam.
-- Docs/config/scripts are updated and repository verification passes.
+- `packages/shifter` implements deterministic decision logic for agent_step, sticky task gear, and hold fallbacks.
+- `datastore` includes `replay_runs`, `judgments`, and `human_reviews` via Drizzle migration and repositories/tests.
+- `evals` can execute replay/judge stage skeletons idempotently against stored tasks/runs.
+- Gateway has a safe seam for variant-specific shifter instances without changing passthrough default behavior.
+- Review UI has the minimum queue/comparison storage path needed for human reviews.
+- Repository verification passes before each pushed slice.
 
 ## Plan
 
@@ -29,6 +28,13 @@ Success criteria:
 - [x] Add M1 category/dirty/self-contained report
 - [x] Update docs/README for M1 commands
 - [x] Run verification, commit, and push
+- [x] Add M2 datastore schema/repositories for replay/judge/review tables
+- [x] Add `packages/shifter` decision engine with tests
+- [ ] Add eval replay skeleton and worktree lifecycle helpers
+- [ ] Add judge skeleton and pairwise prompt
+- [ ] Add minimal review-ui queue/comparison pages
+- [ ] Integrate gateway variant seam without enabling production shifting
+- [ ] Run verification, commit, and push M2 slice
 
 ## Notes
 
@@ -37,3 +43,5 @@ Success criteria:
 - 2026-07-06: M1 started. First implementation slice will add `eval_tasks` and evals runner scaffolding, then classify/sample commands.
 - 2026-07-06: Added `eval_tasks`, eval config/prompt, `packages/evals` classify/sample/audit/report/smoke commands, dry-run sampling guard, and schedule guard seam. Targeted M1 tests passed before full verification.
 - 2026-07-06: Verification passed: `bun test` (55 pass), `bun run lint`, `bun run evals -- report` and `estimate` against an empty temp DB, and `bun run smoke -- --gateway=http://127.0.0.1:18489` through a temporary gateway.
+- 2026-07-06: M1 implementation slice committed and pushed as `3e90589`. M2 started with datastore replay/judge/review tables and shifter pure logic.
+- 2026-07-06: Added M2 replay_runs/judgments/human_reviews schema and repositories, plus `packages/shifter` pure decision logic for tier normalization, agent_step demotion, task promote/demote, sticky hold, and overrides. Verification passed: `bun test` (61 pass) and `bun run lint`.
