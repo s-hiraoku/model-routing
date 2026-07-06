@@ -52,7 +52,9 @@ Success criteria:
 - [x] Add `preference_queue` schema and feedback stage enqueue
 - [x] Add Review UI push queue and answered preference tracking
 - [x] Expire stale preference queue items during feedback stage
-- [ ] Run verification, commit, and push M5 slice
+- [x] Run verification, commit, and push current M5 slices
+- [ ] Implement feedback interpretation and proposal approval loop
+- [ ] Implement auto-suspend / rollback changelog loop
 
 ## Notes
 
