@@ -120,12 +120,12 @@
 - [ ] `feedback.yaml`(注意予算・通知・変更統治)+ config ローダー
 - [ ] stage 7: A/B 選好キュー生成(優先度 = 影響度 × 不確実性)、週 3 問の予算管理、期限切れ処理
 - [ ] 通知フロー: osascript → review-ui クイック比較 → human_reviews(source='push')
-- [ ] `bun run feedback -- add` CLI + `skills/model-feedback/SKILL.md`
+- [ ] `bun run feedback -- add` CLI + `skills/model-feedback/SKILL.md` (`add` / `list` と `feedback_notes` 保存口は実装済み)
 - [ ] フィードバック取り込み: LLM 解釈(parsed_json)→ 変更案生成 → review-ui 提案ページで承認/却下 → 反映 + changelog(origin: human_feedback)
 - [ ] 満足度チェック(月 1 問): 通知 → 満足度ページ → 「止めたい」は即 passthrough 化
 - [ ] `bun run policy -- rollback <version>`(即時巻き戻し)
 
-M5 の初期実装では `config/feedback.yaml` の Zod loader、`bun run evals -- nightly` の日次 Markdown、`bun run policy -- rollback <policy-file>` を先に提供する。通知・自動 suspend・提案承認 UI はこの基盤に後続で接続する。
+M5 の初期実装では `config/feedback.yaml` の Zod loader、`bun run evals -- nightly` の日次 Markdown、`bun run feedback -- add` / `list` の保存口、`bun run policy -- rollback <policy-file>` を先に提供する。通知・自動 suspend・提案承認 UI はこの基盤に後続で接続する。
 
 ### 継続較正
 

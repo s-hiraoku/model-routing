@@ -46,6 +46,8 @@ Success criteria:
 - [x] Add feedback config loader
 - [x] Add nightly monitoring report
 - [x] Add policy rollback CLI
+- [x] Add `feedback_notes` schema and repository
+- [x] Add feedback CLI add/list
 - [ ] Run verification, commit, and push M5 slice
 
 ## Notes
@@ -68,3 +70,4 @@ Success criteria:
 - 2026-07-06: Extended gateway stats with shifted vs unshifted cache hit rates for rollout comparison.
 - 2026-07-06: M4 implementation slices pushed through `a6bef4e`. Verification passed: `bun test` (77 pass) and `bun run lint`. M4 operational gate remains external: run shifting for staged windows and compare quality/error/cache metrics.
 - 2026-07-06: Added M5 foundations: feedback config loader, nightly Markdown report for correction-like tasks / unknown models / shifted errors, and policy rollback CLI.
+- 2026-07-06: Added `feedback_notes` persistence and `bun run feedback -- add/list` so freeform human feedback can be captured before stage 7 interpretation is wired in.

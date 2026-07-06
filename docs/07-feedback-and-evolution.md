@@ -76,6 +76,7 @@ implicit_signals:                     # 暗黙シグナルの閾値(自動ロー
 
 # ターミナルから
 bun run feedback -- add "docs を Haiku にするのは賛成だけどコミットメッセージは Sonnet がいい"
+bun run feedback -- list --status pending
 ```
 
 処理フロー(週次バッチの stage 7):
@@ -88,6 +89,8 @@ feedback_notes(pending)
   → 変更案を review-ui の「提案」ページ + 通知で提示
   → 人間が承認 → ポリシーに反映(origin: human_feedback)/ 却下 → 記録のみ
 ```
+
+現行実装では `feedback_notes` の保存口として `bun run feedback -- add` / `list` を提供する。LLM 解釈、変更案生成、review-ui 提案ページへの接続は後続の stage 7 実装で行う。
 
 **フィードバックが評価の設計自体を変えることもある**(カテゴリ分割、新しい評価観点)。その場合は「次バッチでこの観点のサンプルを厚くする」という形で評価計画に還流する。
 

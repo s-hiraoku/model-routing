@@ -189,6 +189,16 @@ export const tierProfiles = sqliteTable(
   (table) => [uniqueIndex("idx_tier_profiles_pk").on(table.batchId, table.variant, table.taskCategory)],
 );
 
+export const feedbackNotes = sqliteTable("feedback_notes", {
+  id: text("id").primaryKey(),
+  createdAt: integer("created_at").notNull(),
+  source: text("source").notNull(),
+  text: text("text").notNull(),
+  parsedJson: text("parsed_json"),
+  status: text("status").notNull().default("pending"),
+  resolution: text("resolution"),
+});
+
 export const quotaEvents = sqliteTable(
   "quota_events",
   {

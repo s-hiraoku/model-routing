@@ -8,6 +8,13 @@ export {
   listSampleCandidates,
   type SampleCandidateRow,
 } from "./eval-tasks";
+export {
+  type FeedbackNoteInsert,
+  type FeedbackNoteRow,
+  type FeedbackNoteStatus,
+  insertFeedbackNote,
+  listFeedbackNotes,
+} from "./feedback-notes";
 export { defaultDatabasePath, initializeDatabase } from "./init";
 export { insertQuotaEvent, type QuotaEventRow } from "./quota-events";
 export {

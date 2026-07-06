@@ -105,6 +105,8 @@ bun run evals -- run --batch 2026-W28 --stage judge --gateway=http://localhost:8
 bun run evals -- run --batch 2026-W28 --stage aggregate
 bun run evals -- run --batch 2026-W28 --stage report
 bun run evals -- nightly
+bun run feedback -- add "docs は low でよいが commit message は mid がいい"
+bun run feedback -- list --status pending
 bun run policy -- rollback data/policies/shift-policy-2026-W28.yaml
 bun run evals -- audit-classify --n 50
 bun run smoke -- --gateway=http://localhost:8484
@@ -122,7 +124,7 @@ M3 の `aggregate` は `human_reviews` を優先して `tier_profiles` を更新
 
 M4 の production shifting は明示 opt-in。`MODEL_ROUTING_MODE=shifting SHIFT_POLICY=data/policies/shift-policy-2026-W28.yaml bun run gateway` で policy を読み込み、`SIGHUP` で再読込する。policy が読めない場合や `MODEL_ROUTING_DISABLED=1` の場合は passthrough に倒れる。書き換え後の 4xx は元 body で 1 回だけ再試行し、`degrade_guard` として記録する。
 
-M5 の最小 nightly は `bun run evals -- nightly` で `data/reports/nightly-YYYY-MM-DD.md` を生成し、訂正っぽいタスク、未知モデル、shift 後エラーを集計する。`config/feedback.yaml` は注意予算と通知 URL を管理する。`bun run policy -- rollback <policy-file>` で version 付き policy を `config/shift-policy.yaml` へ戻せる。
+M5 の最小 nightly は `bun run evals -- nightly` で `data/reports/nightly-YYYY-MM-DD.md` を生成し、訂正っぽいタスク、未知モデル、shift 後エラーを集計する。`config/feedback.yaml` は注意予算と通知 URL を管理する。自由記述は `bun run feedback -- add "..."` で `feedback_notes` に保存し、`bun run feedback -- list --status pending` で確認できる。`bun run policy -- rollback <policy-file>` で version 付き policy を `config/shift-policy.yaml` へ戻せる。
 
 Claude Code の `UserPromptSubmit` hook には、必要に応じて以下を登録する。
 

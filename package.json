@@ -11,6 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db-init": "bun scripts/db-init.ts",
     "evals": "bun packages/evals/src/main.ts",
+    "feedback": "bun scripts/feedback.ts",
     "gateway": "bun packages/gateway/src/main.ts",
     "lint": "biome check .",
     "log-explorer": "bun scripts/log-explorer.ts",

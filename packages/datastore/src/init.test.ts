@@ -28,6 +28,7 @@ describe("initializeDatabase", () => {
 
         expect(tables).toEqual([
           "eval_tasks",
+          "feedback_notes",
           "human_reviews",
           "judgments",
           "quota_events",
@@ -60,7 +61,7 @@ describe("initializeDatabase", () => {
       const db = new Database(dbPath, { readonly: true });
       try {
         expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM __drizzle_migrations").get()?.count).toBe(
-          5,
+          6,
         );
       } finally {
         db.close();
