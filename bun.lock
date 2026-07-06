@@ -41,6 +41,7 @@
       "dependencies": {
         "@model-routing/datastore": "workspace:*",
         "@model-routing/shared": "workspace:*",
+        "@model-routing/shifter": "workspace:*",
         "hono": "^4.12.27",
         "zod": "^4.4.3",
       },

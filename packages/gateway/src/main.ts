@@ -1,4 +1,5 @@
-import { createGatewayApp } from "./app";
+import { loadModelsConfig } from "@model-routing/shared";
+import { createGatewayApp, createReplayVariantPolicies } from "./app";
 
 const DEFAULT_PORT = 8484;
 const DEFAULT_UPSTREAM = "https://api.anthropic.com";
@@ -20,11 +21,17 @@ function envNumber(name: string, fallback: number): number {
 const port = envNumber("PORT", DEFAULT_PORT);
 const upstream = Bun.env.UPSTREAM ?? DEFAULT_UPSTREAM;
 const requestedMode = Bun.env.MODEL_ROUTING_MODE === "shifting" ? "shifting" : "passthrough";
+const models = await loadModelsConfig(Bun.env.MODELS_CONFIG ?? "config/models.yaml");
 
 Bun.serve({
   hostname: "127.0.0.1",
   port,
-  fetch: createGatewayApp({ upstream, mode: requestedMode }).fetch,
+  fetch: createGatewayApp({
+    upstream,
+    mode: requestedMode,
+    models,
+    variantPolicies: createReplayVariantPolicies(),
+  }).fetch,
 });
 
 console.info(`[gateway] listening on http://127.0.0.1:${port}`);

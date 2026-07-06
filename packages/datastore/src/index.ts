@@ -24,6 +24,7 @@ export {
 export { insertRequestLog, type RequestLogRow } from "./requests";
 export { getReviewQueueItem, listReviewQueue, type ReviewQueueItem } from "./review-queue";
 export * from "./schema";
+export { insertShiftEvent, type ShiftEventInsert } from "./shift-events";
 export { type GatewayStats, getGatewayStats } from "./stats";
 export {
   type ClassificationCandidateRow,

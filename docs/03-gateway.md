@@ -31,10 +31,12 @@
 | `POST /v1/messages` | 記録 + 変速対象の本体。streaming / non-streaming 両対応 |
 | 上記以外の `/*` | api.anthropic.com へ透過プロキシ(記録なし) |
 | `POST /internal/task-event` | hooks からのタスク境界通知 |
+| `POST /internal/replay-begin` | 評価 replay の active variant を開始(直列 replay 用、localhost のみ) |
+| `POST /internal/replay-end` | 評価 replay の active variant を終了(直列 replay 用、localhost のみ) |
 | `GET /internal/healthz` | `{"status":"ok","mode":"passthrough\|shifting"}` |
 | `GET /internal/stats` | 直近 24h: 件数・エラー率・変速内訳・キャッシュヒット率・推定枠消費 |
 
-gateway は 127.0.0.1 バインドのみ。`/internal/*` と `X-MR-Variant` は localhost 由来でのみ受理。
+gateway は 127.0.0.1 バインドのみ。`/internal/*` と `X-MR-Variant` は localhost 由来でのみ受理する。M2 では Agent SDK の任意ヘッダ設定に依存しないため、replayer は `/internal/replay-begin` で `run_id` と `variant` を通知し、直列実行中の `/v1/messages` に active variant を適用する。`X-MR-Variant` が付く場合はヘッダを優先し、上流へは転送しない。
 
 ## 動作モード
 

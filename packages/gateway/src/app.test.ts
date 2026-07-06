@@ -4,7 +4,18 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createGatewayApp } from "./app";
+import type { ModelsConfig } from "@model-routing/shared";
+import { createGatewayApp, createReplayVariantPolicies } from "./app";
+
+const models: ModelsConfig = {
+  tiers: {
+    high: { model: "claude-opus-4-8", match: ["claude-opus-*"], strip_params: [] },
+    mid: { model: "claude-fable-5", match: ["claude-fable-*"], strip_params: [] },
+    low: { model: "claude-haiku-4-5-20251001", match: ["claude-haiku-*"], strip_params: ["output_config.effort"] },
+  },
+  never_touch: ["claude-haiku-*"],
+  subscription: { window_hours: 5, eval_runs_per_window: 20 },
+};
 
 async function waitFor<T>(read: () => T | null, timeoutMs = 1000): Promise<T> {
   const started = Date.now();
@@ -124,8 +135,93 @@ describe("gateway app", () => {
       expect(upstreamHeaders?.get("keep-alive")).toBeNull();
       expect(upstreamHeaders?.get("te")).toBeNull();
       expect(upstreamHeaders?.get("x-remove-me")).toBeNull();
+      expect(upstreamHeaders?.get("x-mr-variant")).toBeNull();
     } finally {
       upstream.stop(true);
+    }
+  });
+
+  test("applies active replay variant seam without enabling production shifting", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-variant-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    let upstreamBody: Record<string, unknown> | null = null;
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        upstreamBody = (await req.json()) as Record<string, unknown>;
+        return Response.json({ id: "msg_1", model: upstreamBody.model });
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+        models,
+        variantPolicies: createReplayVariantPolicies(),
+      });
+      const begin = await app.request("http://127.0.0.1/internal/replay-begin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ run_id: "run-1", variant: "mid+demote" }),
+      });
+      expect(begin.status).toBe(200);
+
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          stream: false,
+          output_config: { effort: "high" },
+          messages: [
+            { role: "assistant", content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: {} }] },
+            {
+              role: "user",
+              content: [
+                { type: "tool_result", tool_use_id: "toolu_1", content: "ok" },
+                { type: "text", text: "ok" },
+              ],
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(upstreamBody?.model).toBe("claude-haiku-4-5-20251001");
+      expect(upstreamBody?.output_config).toEqual({});
+      expect(await response.json()).toEqual({ id: "msg_1", model: "claude-haiku-4-5-20251001" });
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const request = await waitFor(() =>
+          db
+            .query<{ replay_run_id: string; model_requested: string; model_served: string }, []>(
+              "SELECT replay_run_id, model_requested, model_served FROM requests LIMIT 1",
+            )
+            .get(),
+        );
+        expect(request).toEqual({
+          replay_run_id: "run-1",
+          model_requested: "claude-fable-5",
+          model_served: "claude-haiku-4-5-20251001",
+        });
+        const shift = db
+          .query<{ gear_from: string; gear_to: string; reason: string }, []>(
+            "SELECT gear_from, gear_to, reason FROM shift_events LIMIT 1",
+          )
+          .get();
+        expect(shift).toEqual({ gear_from: "mid", gear_to: "low", reason: "demote_agent_step" });
+      } finally {
+        db.close();
+      }
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
     }
   });
 

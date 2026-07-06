@@ -5,7 +5,9 @@ import {
   initializeDatabase,
   insertQuotaEvent,
   insertRequestLog,
+  insertShiftEvent,
   insertTaskEvent,
+  type ShiftEventInsert,
   upsertSession,
   writeZstdJson,
 } from "@model-routing/datastore";
@@ -13,10 +15,13 @@ import {
   buildClientResponse,
   classifyHeuristic,
   type GatewayMode,
+  type ModelsConfig,
   resolveGatewayMode,
   sha256Hex,
+  type Tier,
   uuidv7,
 } from "@model-routing/shared";
+import { decideShift, type ShiftPolicy, withTier } from "@model-routing/shifter";
 import { Hono } from "hono";
 import { z } from "zod";
 import { extractRequestFeatures } from "./features";
@@ -28,6 +33,20 @@ export type GatewayOptions = {
   dataDir?: string;
   dbPath?: string;
   enableLogging?: boolean;
+  models?: ModelsConfig;
+  variantPolicies?: Record<string, ShiftPolicy>;
+};
+
+type ActiveReplay = {
+  runId: string;
+  variant: string;
+  expiresAt: number;
+};
+
+type PreparedMessagesRequest = {
+  upstreamBody: string;
+  replayRunId: string | null;
+  shiftEvent: Omit<ShiftEventInsert, "requestId" | "createdAt"> | null;
 };
 
 function buildUpstreamUrl(requestUrl: string, upstreamBase: string): string {
@@ -42,6 +61,7 @@ function buildUpstreamHeaders(requestHeaders: Headers, upstreamBase: string): He
 
   headers.set("host", upstream.host);
   headers.delete("content-length");
+  headers.delete("x-mr-variant");
 
   if (connectionHeader) {
     for (const headerName of connectionHeader.split(",")) {
@@ -122,6 +142,8 @@ async function logMessagesRequest(args: {
   startedAt: number;
   rawRequestBody: string;
   requestHeaders: Headers;
+  replayRunId: string | null;
+  shiftEvent: Omit<ShiftEventInsert, "requestId" | "createdAt"> | null;
   responseBody: ReadableStream<Uint8Array> | null;
   upstreamResponse: Response;
 }): Promise<void> {
@@ -146,7 +168,7 @@ async function logMessagesRequest(args: {
   insertRequestLog(args.dbPath, {
     id: args.requestId,
     sessionId: null,
-    replayRunId: null,
+    replayRunId: args.replayRunId,
     createdAt: args.startedAt,
     modelRequested: features.modelRequested,
     modelServed: response.metadata.model ?? features.modelRequested,
@@ -170,6 +192,14 @@ async function logMessagesRequest(args: {
     bodyPath,
   });
 
+  if (args.shiftEvent) {
+    insertShiftEvent(args.dbPath, {
+      requestId: args.requestId,
+      createdAt: args.startedAt,
+      ...args.shiftEvent,
+    });
+  }
+
   if (status === "rate_limited") {
     insertQuotaEvent(args.dbPath, {
       id: uuidv7(),
@@ -187,6 +217,8 @@ async function logMessagesGatewayError(args: {
   startedAt: number;
   rawRequestBody: string;
   requestHeaders: Headers;
+  replayRunId: string | null;
+  shiftEvent: Omit<ShiftEventInsert, "requestId" | "createdAt"> | null;
   error: Error;
   status: "gateway_error" | "client_abort";
 }): Promise<void> {
@@ -207,7 +239,7 @@ async function logMessagesGatewayError(args: {
   insertRequestLog(args.dbPath, {
     id: args.requestId,
     sessionId: null,
-    replayRunId: null,
+    replayRunId: args.replayRunId,
     createdAt: args.startedAt,
     modelRequested: features.modelRequested,
     modelServed: features.modelRequested,
@@ -230,6 +262,14 @@ async function logMessagesGatewayError(args: {
     errorMessage: args.error.message,
     bodyPath,
   });
+
+  if (args.shiftEvent) {
+    insertShiftEvent(args.dbPath, {
+      requestId: args.requestId,
+      createdAt: args.startedAt,
+      ...args.shiftEvent,
+    });
+  }
 }
 
 function gatewayErrorResponse(error: unknown): Response {
@@ -263,6 +303,150 @@ const taskEventSchema = z.object({
   git_remote: z.string().nullable().optional(),
 });
 
+const replayControlSchema = z.object({
+  run_id: z.string().min(1),
+  variant: z.string().min(1),
+});
+
+function isLocalRequest(req: Request): boolean {
+  const hostname = new URL(req.url).hostname;
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+}
+
+function stripJsonPath(value: Record<string, unknown>, path: string): void {
+  const parts = path.split(".").filter(Boolean);
+  if (parts.length === 0) {
+    return;
+  }
+
+  let cursor: unknown = value;
+  for (const part of parts.slice(0, -1)) {
+    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) {
+      return;
+    }
+    cursor = (cursor as Record<string, unknown>)[part];
+  }
+
+  if (cursor && typeof cursor === "object" && !Array.isArray(cursor)) {
+    delete (cursor as Record<string, unknown>)[parts[parts.length - 1]];
+  }
+}
+
+function rewriteMessagesBodyForTier(rawBody: string, gear: Tier, models: ModelsConfig): string | null {
+  try {
+    const parsed = JSON.parse(rawBody) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const body = parsed as Record<string, unknown>;
+    const tier = models.tiers[gear];
+    body.model = tier.model;
+    for (const path of tier.strip_params) {
+      stripJsonPath(body, path);
+    }
+
+    return JSON.stringify(body);
+  } catch {
+    console.warn("[gateway] variant rewrite skipped: request body is not valid JSON");
+    return null;
+  }
+}
+
+export function createReplayVariantPolicies(): Record<string, ShiftPolicy> {
+  return {
+    "mid+demote": {
+      version: "replay-mid-demote-v1",
+      demote: {
+        agent_step: { enabled: true, to: "low", min_consecutive: 1 },
+        categories: {},
+      },
+      promote: { categories: {} },
+      governor: {
+        quota_guard: false,
+        window_burn_threshold: 1,
+        degrade_error_rate: 1,
+        degrade_pause_minutes: 15,
+      },
+      overrides: {},
+    },
+  };
+}
+
+function resolveReplayVariant(
+  req: Request,
+  activeReplay: ActiveReplay | null,
+): { variant: string; runId: string | null } | null {
+  if (!isLocalRequest(req)) {
+    return null;
+  }
+
+  const headerVariant = req.headers.get("x-mr-variant");
+  if (headerVariant) {
+    return { variant: headerVariant, runId: null };
+  }
+
+  if (activeReplay && activeReplay.expiresAt > Date.now()) {
+    return { variant: activeReplay.variant, runId: activeReplay.runId };
+  }
+
+  return null;
+}
+
+function prepareMessagesRequest(args: {
+  req: Request;
+  rawRequestBody: string;
+  models?: ModelsConfig;
+  variantPolicies: Record<string, ShiftPolicy>;
+  activeReplay: ActiveReplay | null;
+}): PreparedMessagesRequest {
+  const replay = resolveReplayVariant(args.req, args.activeReplay);
+  if (!replay || !args.models) {
+    return { upstreamBody: args.rawRequestBody, replayRunId: replay?.runId ?? null, shiftEvent: null };
+  }
+
+  const policy = args.variantPolicies[replay.variant];
+  if (!policy) {
+    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null };
+  }
+
+  const features = withTier(extractRequestFeatures(args.rawRequestBody), args.models);
+  const decision = decideShift({
+    features,
+    state: {
+      taskEventId: null,
+      category: null,
+      currentGear: null,
+      demotedStreak: 0,
+      isTaskStart: false,
+    },
+    policy,
+    enabled: true,
+  });
+
+  if (!features.tierRequested || decision.gear === features.tierRequested) {
+    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null };
+  }
+
+  const rewritten = rewriteMessagesBodyForTier(args.rawRequestBody, decision.gear, args.models);
+  if (!rewritten) {
+    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null };
+  }
+
+  return {
+    upstreamBody: rewritten,
+    replayRunId: replay.runId,
+    shiftEvent: {
+      policyVersion: decision.policyVersion ?? "none",
+      taskEventId: null,
+      decidedCategory: null,
+      gearFrom: features.tierRequested,
+      gearTo: decision.gear,
+      reason: decision.reason,
+    },
+  };
+}
+
 async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<Response> {
   let upstreamResponse: Response;
 
@@ -285,10 +469,21 @@ async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<R
   return buildClientResponse(upstreamResponse);
 }
 
-async function proxyMessagesRequest(req: Request, options: Required<GatewayOptions>): Promise<Response> {
+async function proxyMessagesRequest(
+  req: Request,
+  options: Required<GatewayOptions>,
+  activeReplay: ActiveReplay | null,
+): Promise<Response> {
   const requestId = uuidv7();
   const startedAt = Date.now();
   const rawRequestBody = await req.text();
+  const prepared = prepareMessagesRequest({
+    req,
+    rawRequestBody,
+    models: options.models,
+    variantPolicies: options.variantPolicies,
+    activeReplay,
+  });
 
   let upstreamResponse: Response;
 
@@ -296,7 +491,7 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
     upstreamResponse = await fetch(buildUpstreamUrl(req.url, options.upstream), {
       method: req.method,
       headers: buildUpstreamHeaders(req.headers, options.upstream),
-      body: rawRequestBody,
+      body: prepared.upstreamBody,
       signal: req.signal,
       redirect: "manual",
     });
@@ -311,6 +506,8 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
       startedAt,
       rawRequestBody,
       requestHeaders: req.headers,
+      replayRunId: prepared.replayRunId,
+      shiftEvent: prepared.shiftEvent,
       error: normalizedError,
       status,
     }).catch((logError) => console.warn(`[gateway] request log failed: ${logError}`));
@@ -330,6 +527,8 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
       startedAt,
       rawRequestBody,
       requestHeaders: req.headers,
+      replayRunId: prepared.replayRunId,
+      shiftEvent: prepared.shiftEvent,
       responseBody: null,
       upstreamResponse,
     }).catch((error) => console.warn(`[gateway] request log failed: ${error}`));
@@ -346,6 +545,8 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
     startedAt,
     rawRequestBody,
     requestHeaders: req.headers,
+    replayRunId: prepared.replayRunId,
+    shiftEvent: prepared.shiftEvent,
     responseBody: logBody,
     upstreamResponse,
   }).catch((error) => console.warn(`[gateway] request log failed: ${error}`));
@@ -360,8 +561,11 @@ export function createGatewayApp(options: GatewayOptions): Hono {
     dbPath: options.dbPath ?? defaultDatabasePath(options.dataDir ?? "data"),
     enableLogging: options.enableLogging ?? true,
     mode: options.mode,
+    models: options.models,
     upstream: options.upstream,
+    variantPolicies: options.variantPolicies ?? {},
   };
+  let activeReplay: ActiveReplay | null = null;
 
   if (resolvedOptions.enableLogging) {
     initializeDatabase(resolvedOptions.dbPath);
@@ -430,12 +634,48 @@ export function createGatewayApp(options: GatewayOptions): Hono {
     });
   });
 
+  app.post("/internal/replay-begin", async (c) => {
+    if (!isLocalRequest(c.req.raw)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const parsed = replayControlSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "invalid replay control" }, 400);
+    }
+
+    activeReplay = {
+      runId: parsed.data.run_id,
+      variant: parsed.data.variant,
+      expiresAt: Date.now() + 30 * 60 * 1000,
+    };
+
+    return c.json({ status: "ok" });
+  });
+
+  app.post("/internal/replay-end", async (c) => {
+    if (!isLocalRequest(c.req.raw)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const parsed = replayControlSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "invalid replay control" }, 400);
+    }
+
+    if (activeReplay?.runId === parsed.data.run_id) {
+      activeReplay = null;
+    }
+
+    return c.json({ status: "ok" });
+  });
+
   app.post("/v1/messages", (c) => {
     if (!resolvedOptions.enableLogging) {
       return proxyToUpstream(c.req.raw, resolvedOptions);
     }
 
-    return proxyMessagesRequest(c.req.raw, resolvedOptions);
+    return proxyMessagesRequest(c.req.raw, resolvedOptions, activeReplay);
   });
 
   app.all("*", (c) => proxyToUpstream(c.req.raw, resolvedOptions));

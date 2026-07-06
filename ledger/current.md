@@ -33,7 +33,7 @@ Success criteria:
 - [x] Add eval replay skeleton and worktree lifecycle helpers
 - [x] Add judge skeleton and pairwise prompt
 - [x] Add minimal review-ui queue/comparison pages
-- [ ] Integrate gateway variant seam without enabling production shifting
+- [x] Integrate gateway variant seam without enabling production shifting
 - [ ] Run verification, commit, and push M2 slice
 
 ## Notes
@@ -48,3 +48,4 @@ Success criteria:
 - 2026-07-06: Added replay stage skeleton, variant-to-model mapping, Agent SDK worktree executor seam, artifact writing under `data/runs`, quota event recording, and idempotent skip behavior. Targeted replay tests and empty-DB CLI replay passed.
 - 2026-07-06: Added judge stage skeleton with pairwise-v1 prompt, schema-enforced Agent SDK judge output, position swapping, before-context extraction, idempotent judgment insertion, and tests. Review UI and gateway variant seam remain for M2.
 - 2026-07-06: Added minimal Hono JSX Review UI with queue, blind compare, review POST storage, reveal page, keyboard submit script, and datastore review queue repositories/tests. Gateway variant seam remains for M2.
+- 2026-07-06: Added gateway replay variant seam with `/internal/replay-begin` and `/internal/replay-end`, localhost-only `X-MR-Variant` handling, `mid+demote` agent-step demotion through shifter, request replay_run_id logging, and shift_events insertion.

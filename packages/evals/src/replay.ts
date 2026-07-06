@@ -47,6 +47,26 @@ export function replayVariants(config: EvalConfig, models: ModelsConfig): Replay
   }));
 }
 
+async function notifyReplayGateway(args: {
+  gatewayBaseUrl: string | undefined;
+  path: "/internal/replay-begin" | "/internal/replay-end";
+  runId: string;
+  variantId: string;
+}): Promise<void> {
+  if (!args.gatewayBaseUrl) {
+    return;
+  }
+
+  const response = await fetch(new URL(args.path, args.gatewayBaseUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ run_id: args.runId, variant: args.variantId }),
+  });
+  if (!response.ok) {
+    throw new Error(`${args.path} failed: ${response.status}`);
+  }
+}
+
 export async function defaultReplayExecutor(args: {
   runId: string;
   task: EvalTaskRow;
@@ -77,6 +97,13 @@ export async function defaultReplayExecutor(args: {
         throw new Error(`setup command failed: ${setup.stderr || setup.stdout}`);
       }
     }
+
+    await notifyReplayGateway({
+      gatewayBaseUrl: args.gatewayBaseUrl,
+      path: "/internal/replay-begin",
+      runId: args.runId,
+      variantId: args.variant.id,
+    });
 
     for await (const message of query({
       prompt: args.task.promptText,
@@ -139,6 +166,12 @@ export async function defaultReplayExecutor(args: {
       errorMessage: error instanceof Error ? error.message : "unknown replay error",
     };
   } finally {
+    await notifyReplayGateway({
+      gatewayBaseUrl: args.gatewayBaseUrl,
+      path: "/internal/replay-end",
+      runId: args.runId,
+      variantId: args.variant.id,
+    }).catch((error) => console.warn(`[evals] replay-end failed: ${error}`));
     await removeWorktree(args.task.repoPath, worktreePath);
   }
 }
