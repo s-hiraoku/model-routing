@@ -99,6 +99,131 @@ function buildUpstreamHeaders(requestHeaders: Headers, upstreamBase: string): He
   return headers;
 }
 
+export function buildClientResponse(upstreamResponse: Response): Response {
+  const headers = new Headers(upstreamResponse.headers);
+
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+  headers.delete("transfer-encoding");
+
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers,
+  });
+}
+
+export function findModelInSseText(text: string): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) {
+      continue;
+    }
+
+    const data = line.slice("data:".length).trim();
+    if (!data || data === "[DONE]") {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(data) as unknown;
+      if (!parsed || typeof parsed !== "object") {
+        continue;
+      }
+
+      const event = parsed as Record<string, unknown>;
+      const message = event.message;
+
+      if (message && typeof message === "object" && !Array.isArray(message)) {
+        const model = (message as Record<string, unknown>).model;
+        if (typeof model === "string") {
+          return model;
+        }
+      }
+
+      if (typeof event.model === "string") {
+        return event.model;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function logResponseModel(contentType: string | null, body: ReadableStream<Uint8Array>): Promise<void> {
+  if (contentType?.includes("text/event-stream")) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffered = "";
+
+    try {
+      while (buffered.length < 128_000) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffered += decoder.decode(value, { stream: true });
+        const model = findModelInSseText(buffered);
+
+        if (model) {
+          console.info(`[spike] response model: ${model}`);
+          await reader.cancel();
+          return;
+        }
+      }
+
+      buffered += decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
+
+    const model = findModelInSseText(buffered);
+    if (model) {
+      console.info(`[spike] response model: ${model}`);
+    }
+
+    return;
+  }
+
+  const text = await new Response(body).text();
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const model = (parsed as Record<string, unknown>).model;
+      if (typeof model === "string") {
+        console.info(`[spike] response model: ${model}`);
+      }
+    }
+  } catch {
+    // Non-JSON responses are valid for provider errors; status is visible to the client.
+  }
+}
+
+function buildLoggedClientResponse(upstreamResponse: Response): Response {
+  if (!upstreamResponse.body) {
+    return buildClientResponse(upstreamResponse);
+  }
+
+  const [clientBody, logBody] = upstreamResponse.body.tee();
+  void logResponseModel(upstreamResponse.headers.get("content-type"), logBody).catch((error) => {
+    const message = error instanceof Error ? error.message : "unknown response log error";
+    console.warn(`[spike] response model log warning: ${message}`);
+  });
+
+  const headers = new Headers(upstreamResponse.headers);
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+  headers.delete("transfer-encoding");
+
+  return new Response(clientBody, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers,
+  });
+}
+
 async function proxyRequest(req: Request, upstreamBase: string, rewriteModel: string | null): Promise<Response> {
   const url = new URL(req.url);
   const upstreamUrl = buildUpstreamUrl(req.url, upstreamBase);
@@ -125,13 +250,19 @@ async function proxyRequest(req: Request, upstreamBase: string, rewriteModel: st
     }
   }
 
-  return fetch(upstreamUrl, {
+  const upstreamResponse = await fetch(upstreamUrl, {
     method: req.method,
     headers,
     body,
     signal: req.signal,
     redirect: "manual",
   });
+
+  if (req.method === "POST" && url.pathname === "/v1/messages") {
+    return buildLoggedClientResponse(upstreamResponse);
+  }
+
+  return buildClientResponse(upstreamResponse);
 }
 
 function envNumber(name: string, fallback: number): number {

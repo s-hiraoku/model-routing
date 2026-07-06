@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildUpstreamUrl, rewriteMessagesBody, serveSpikeProxy } from "./spike-rewrite";
+import {
+  buildClientResponse,
+  buildUpstreamUrl,
+  findModelInSseText,
+  rewriteMessagesBody,
+  serveSpikeProxy,
+} from "./spike-rewrite";
 
 describe("rewriteMessagesBody", () => {
   test("rewrites only the top-level model field", () => {
@@ -44,6 +50,47 @@ describe("buildUpstreamUrl", () => {
     expect(buildUpstreamUrl("http://127.0.0.1:8484/v1/messages?beta=1", "https://api.anthropic.com")).toBe(
       "https://api.anthropic.com/v1/messages?beta=1",
     );
+  });
+});
+
+describe("buildClientResponse", () => {
+  test("drops compression headers that no longer describe the returned body", async () => {
+    const response = buildClientResponse(
+      new Response("ok", {
+        status: 201,
+        headers: {
+          "content-encoding": "gzip",
+          "content-length": "20",
+          "transfer-encoding": "chunked",
+          "content-type": "text/plain",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("content-encoding")).toBeNull();
+    expect(response.headers.get("content-length")).toBeNull();
+    expect(response.headers.get("transfer-encoding")).toBeNull();
+    expect(response.headers.get("content-type")).toBe("text/plain");
+    expect(await response.text()).toBe("ok");
+  });
+});
+
+describe("findModelInSseText", () => {
+  test("extracts model from a message_start event", () => {
+    expect(
+      findModelInSseText(
+        [
+          "event: message_start",
+          'data: {"type":"message_start","message":{"id":"msg_1","model":"claude-opus-4-8"}}',
+          "",
+        ].join("\n"),
+      ),
+    ).toBe("claude-opus-4-8");
+  });
+
+  test("ignores malformed data lines", () => {
+    expect(findModelInSseText(["event: ping", "data: {", "", "data: [DONE]", ""].join("\n"))).toBeNull();
   });
 });
 
