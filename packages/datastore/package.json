@@ -1,0 +1,13 @@
+{
+  "name": "@model-routing/datastore",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@model-routing/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  }
+}

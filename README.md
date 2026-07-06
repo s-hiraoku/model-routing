@@ -88,6 +88,7 @@ ANTHROPIC_BASE_URL="http://127.0.0.1:8484" claude -p "1+1は?"
 
 ```bash
 bun install
+bun run db-init
 bun test
 bun run lint
 bun run gateway              # localhost:8484, passthrough gateway skeleton

@@ -1,0 +1,41 @@
+import { Database } from "bun:sqlite";
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { defaultDatabasePath, initializeDatabase } from "./init";
+
+describe("initializeDatabase", () => {
+  test("creates M0 tables and enables WAL mode", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-db-"));
+    const dbPath = join(dir, "model-routing.db");
+
+    try {
+      initializeDatabase(dbPath);
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const tables = db
+          .query<{ name: string }, []>(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+          )
+          .all()
+          .map((row) => row.name);
+
+        expect(tables).toEqual(["quota_events", "requests", "sessions", "shift_events", "task_events"]);
+        expect(db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
+      } finally {
+        db.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("defaultDatabasePath", () => {
+  test("uses DATA_DIR-compatible paths", () => {
+    expect(defaultDatabasePath("data/")).toBe("data/model-routing.db");
+    expect(defaultDatabasePath("/tmp/model-routing")).toBe("/tmp/model-routing/model-routing.db");
+  });
+});
