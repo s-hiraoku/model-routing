@@ -1,0 +1,22 @@
+tiers:
+  high:
+    model: claude-opus-4-8
+    match:
+      - claude-opus-*
+  mid:
+    model: claude-fable-5
+    match:
+      - claude-fable-*
+      - claude-sonnet-*
+  low:
+    model: claude-haiku-4-5-20251001
+    match:
+      - claude-haiku-*
+
+never_touch:
+  - claude-haiku-*
+
+subscription:
+  window_hours: 5
+  eval_runs_per_window: 20
+

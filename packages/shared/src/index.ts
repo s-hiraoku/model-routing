@@ -1,3 +1,5 @@
+export { loadModelsConfig, type ModelsConfig, modelsConfigSchema } from "./config";
+
 export type Tier = "high" | "mid" | "low";
 
 export type TaskCategory = "plan" | "debug" | "code_gen" | "code_edit" | "review" | "test" | "docs" | "unknown";
