@@ -10,6 +10,10 @@ export type GatewayStats = {
     inputTokens: number;
     cacheReadTokens: number;
     hitRate: number | null;
+    byShift: {
+      shifted: CacheStats;
+      unshifted: CacheStats;
+    };
   };
   models: Record<
     string,
@@ -23,6 +27,12 @@ export type GatewayStats = {
     byReason: Record<string, number>;
     byGear: Record<string, number>;
   };
+};
+
+export type CacheStats = {
+  inputTokens: number;
+  cacheReadTokens: number;
+  hitRate: number | null;
 };
 
 type CountRow = {
@@ -42,8 +52,24 @@ type CacheRow = {
   cacheReadTokens: number | null;
 };
 
+type CacheByShiftRow = CacheRow & {
+  key: "shifted" | "unshifted";
+};
+
 function countRowsToRecord(rows: CountRow[]): Record<string, number> {
   return Object.fromEntries(rows.map((row) => [row.key ?? "unknown", row.count]));
+}
+
+function cacheStats(row: CacheRow | null | undefined): CacheStats {
+  const inputTokens = row?.inputTokens ?? 0;
+  const cacheReadTokens = row?.cacheReadTokens ?? 0;
+  const denominator = inputTokens + cacheReadTokens;
+
+  return {
+    inputTokens,
+    cacheReadTokens,
+    hitRate: denominator ? cacheReadTokens / denominator : null,
+  };
 }
 
 export function getGatewayStats(dbPath: string, now = Date.now(), windowMs = 24 * 60 * 60 * 1000): GatewayStats {
@@ -72,6 +98,21 @@ export function getGatewayStats(dbPath: string, now = Date.now(), windowMs = 24 
         `,
       )
       .get(since) ?? { inputTokens: 0, cacheReadTokens: 0 };
+    const cacheByShiftRows = db
+      .query<CacheByShiftRow, [number]>(
+        `
+        SELECT
+          CASE WHEN se.request_id IS NULL THEN 'unshifted' ELSE 'shifted' END AS key,
+          COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
+          COALESCE(SUM(r.cache_read_tokens), 0) AS cacheReadTokens
+        FROM requests r
+        LEFT JOIN shift_events se ON se.request_id = r.id
+        WHERE r.created_at >= ?
+        GROUP BY CASE WHEN se.request_id IS NULL THEN 'unshifted' ELSE 'shifted' END
+        `,
+      )
+      .all(since);
+    const cacheByShift = new Map(cacheByShiftRows.map((row) => [row.key, cacheStats(row)]));
     const modelRows = db
       .query<ModelRow, [number]>(
         `
@@ -108,9 +149,7 @@ export function getGatewayStats(dbPath: string, now = Date.now(), windowMs = 24 
         .all(since),
     );
 
-    const inputTokens = cache.inputTokens ?? 0;
-    const cacheReadTokens = cache.cacheReadTokens ?? 0;
-    const cacheDenominator = inputTokens + cacheReadTokens;
+    const overallCache = cacheStats(cache);
 
     return {
       windowMs,
@@ -119,9 +158,11 @@ export function getGatewayStats(dbPath: string, now = Date.now(), windowMs = 24 
         byStatus,
       },
       cache: {
-        inputTokens,
-        cacheReadTokens,
-        hitRate: cacheDenominator ? cacheReadTokens / cacheDenominator : null,
+        ...overallCache,
+        byShift: {
+          shifted: cacheByShift.get("shifted") ?? cacheStats(null),
+          unshifted: cacheByShift.get("unshifted") ?? cacheStats(null),
+        },
       },
       models: Object.fromEntries(
         modelRows.map((row) => [

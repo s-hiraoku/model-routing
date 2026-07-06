@@ -693,7 +693,15 @@ export function createGatewayApp(options: GatewayOptions): Hono {
       return c.json({
         windowMs: 24 * 60 * 60 * 1000,
         requests: { total: 0, byStatus: {} },
-        cache: { inputTokens: 0, cacheReadTokens: 0, hitRate: null },
+        cache: {
+          inputTokens: 0,
+          cacheReadTokens: 0,
+          hitRate: null,
+          byShift: {
+            shifted: { inputTokens: 0, cacheReadTokens: 0, hitRate: null },
+            unshifted: { inputTokens: 0, cacheReadTokens: 0, hitRate: null },
+          },
+        },
         models: {},
         shifts: { byReason: {}, byGear: {} },
       });

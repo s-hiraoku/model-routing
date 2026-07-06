@@ -115,6 +115,7 @@ API リクエストには session_id が乗らないため、`(時刻近接, sys
 - リクエスト数・エラー率(status 別)
 - 変速内訳(reason 別、gear_from→gear_to 別)
 - **キャッシュヒット率**: cache_read_tokens / input_tokens(変速有効化前後の比較が M4 ゲート)
+- **変速別キャッシュヒット率**: shifted / unshifted の cache_read 比較
 - 推定枠消費: モデル別トークン合計(ウィンドウ相当期間)
 
 ## 主要インターフェース

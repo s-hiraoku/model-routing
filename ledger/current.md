@@ -42,7 +42,7 @@ Success criteria:
 - [x] Integrate production shifting mode with loaded policy
 - [x] Add shifted 4xx transparent retry and degrade_guard logging
 - [x] Add SIGHUP policy reload in gateway main
-- [ ] Add rollout/stats polish for cache comparison and operational notes
+- [x] Add rollout/stats polish for cache comparison and operational notes
 - [ ] Run verification, commit, and push M4 slice
 
 ## Notes
@@ -62,3 +62,4 @@ Success criteria:
 - 2026-07-06: Added M3 aggregate stage with Wilson CI, human review overrides, judge-human κ, `tier_profiles` schema/repository, plus report and conservative shift-policy generation from thresholds while preserving overrides.
 - 2026-07-06: M3 implementation slice pushed as `079d88c`. Verification passed: `bun test` (75 pass), `bun run lint`, and empty-DB aggregate/report CLI. M3 operational gate remains external: accumulate real batches and inspect generated policy conclusions.
 - 2026-07-06: Added M4 production shifting integration behind `MODEL_ROUTING_MODE=shifting`, `SHIFT_POLICY` loading with SIGHUP reload, policy-driven model rewrite, and shifted 4xx original-body retry recorded as `degrade_guard`.
+- 2026-07-06: Extended gateway stats with shifted vs unshifted cache hit rates for rollout comparison.
