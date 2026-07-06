@@ -250,3 +250,5 @@ bun run review-ui
 M1 時点では `classify` はデフォルトでヒューリスティックのみ実行する。`--llm` を付けると unknown / confidence < 0.8 の task_events を Claude Agent SDK(low tier、ツール無効)へ送る。`sample` は `--yes` なしでは dry run として枠見積もりだけを表示する。
 
 M2 の `replay` は `eval_tasks` ごとに configured variant の `replay_runs` を作成し、既存 run はスキップする。実行成果物は `data/runs/{replay_run_id}/` に保存する。`mid+demote` は mid tier モデルで実行し、gateway 側の variant seam が有効になった段階で本番と同じ変速コードパスへ接続する。
+
+M2 の `judge` は `replay_runs.status = 'ok'` の baseline(mid) と各 non-baseline run を比較し、`judgments` に `candidate_win` / `baseline_win` / `tie` を保存する。`judge.position_swap = true` の場合は candidate-first / baseline-first の 2 件を作り、既存 judgment は `(eval_task_id, candidate_run_id, position)` でスキップする。ジャッジには Agent SDK の `outputFormat: json_schema`、`tools: []`、`maxTurns: 1` を使い、JSON パース失敗時は 1 回リトライする。

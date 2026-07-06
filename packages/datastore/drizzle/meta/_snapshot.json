@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4353e0f2-dd9c-46bd-b3f2-a2dca944e2e5",
+  "id": "ccfce0f4-cfcf-45f8-b1c9-27c5507204aa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "eval_tasks": {
@@ -287,7 +287,7 @@
         "idx_judgments_task": {
           "name": "idx_judgments_task",
           "columns": ["eval_task_id", "candidate_run_id", "position"],
-          "isUnique": false
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -480,7 +480,7 @@
         "idx_replay_runs_task": {
           "name": "idx_replay_runs_task",
           "columns": ["eval_task_id", "variant"],
-          "isUnique": false
+          "isUnique": true
         }
       },
       "foreignKeys": {

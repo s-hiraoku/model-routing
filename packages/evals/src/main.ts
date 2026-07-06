@@ -3,6 +3,7 @@ import { defaultDatabasePath, initializeDatabase, listEvalTasksByBatch } from "@
 import { loadEvalConfig, loadModelsConfig } from "@model-routing/shared";
 import { formatAuditTasks, listAuditTasks } from "./audit";
 import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
+import { runJudgeStage } from "./judge";
 import { runReplayStage } from "./replay";
 import { formatM1Report, getM1Report } from "./report";
 import { estimateRuns, sampleTasks } from "./sample";
@@ -71,7 +72,7 @@ function flagBoolean(args: ParsedArgs, name: string): boolean {
 function usage(): string {
   return [
     "Usage:",
-    "  bun run evals -- run --batch <id> --stage classify|sample|replay|all [--llm] [--yes]",
+    "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
     "  bun run evals -- audit-classify --n 50",
     "  bun run evals -- report",
@@ -140,6 +141,20 @@ async function commandRun(args: ParsedArgs): Promise<void> {
       gatewayBaseUrl: flagString(args, "gateway", ""),
     });
     console.info(`replay: tasks=${result.tasks} inserted=${result.insertedRuns} skipped=${result.skippedRuns}`);
+  }
+
+  if (stage === "judge" || stage === "all") {
+    const result = await runJudgeStage({
+      dbPath,
+      batchId,
+      config,
+      models,
+      promptPath: flagString(args, "judge-prompt", "config/prompts/pairwise-v1.md"),
+      gatewayBaseUrl: flagString(args, "gateway", ""),
+    });
+    console.info(
+      `judge: tasks=${result.tasks} inserted=${result.insertedJudgments} skipped=${result.skippedJudgments} missing_baselines=${result.missingBaselines}`,
+    );
   }
 
   if (stage === "all") {

@@ -16,6 +16,7 @@ export {
   insertJudgment,
   insertReplayRun,
   type JudgmentRow,
+  listJudgmentsForTask,
   listReplayRunsForTask,
   type ReplayRunInsert,
   type ReplayRunRow,

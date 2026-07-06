@@ -59,7 +59,7 @@ describe("initializeDatabase", () => {
       const db = new Database(dbPath, { readonly: true });
       try {
         expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM __drizzle_migrations").get()?.count).toBe(
-          3,
+          4,
         );
       } finally {
         db.close();

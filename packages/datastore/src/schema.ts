@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
@@ -121,7 +121,7 @@ export const replayRuns = sqliteTable(
     verifyPassed: integer("verify_passed"),
     errorMessage: text("error_message"),
   },
-  (table) => [index("idx_replay_runs_task").on(table.evalTaskId, table.variant)],
+  (table) => [uniqueIndex("idx_replay_runs_task").on(table.evalTaskId, table.variant)],
 );
 
 export const judgments = sqliteTable(
@@ -144,7 +144,7 @@ export const judgments = sqliteTable(
     scoresJson: text("scores_json"),
     rationale: text("rationale"),
   },
-  (table) => [index("idx_judgments_task").on(table.evalTaskId, table.candidateRunId, table.position)],
+  (table) => [uniqueIndex("idx_judgments_task").on(table.evalTaskId, table.candidateRunId, table.position)],
 );
 
 export const humanReviews = sqliteTable(

@@ -183,6 +183,43 @@ export function insertJudgment(dbPath: string, row: JudgmentRow): void {
   }
 }
 
+export function listJudgmentsForTask(dbPath: string, evalTaskId: string): JudgmentRow[] {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    return db
+      .query<
+        {
+          id: string;
+          eval_task_id: string;
+          candidate_run_id: string;
+          baseline_run_id: string;
+          position: string;
+          prompt_version: string;
+          created_at: number;
+          verdict: string;
+          scores_json: string | null;
+          rationale: string | null;
+        },
+        [string]
+      >("SELECT * FROM judgments WHERE eval_task_id = ? ORDER BY created_at, id")
+      .all(evalTaskId)
+      .map((row) => ({
+        id: row.id,
+        evalTaskId: row.eval_task_id,
+        candidateRunId: row.candidate_run_id,
+        baselineRunId: row.baseline_run_id,
+        position: row.position,
+        promptVersion: row.prompt_version,
+        createdAt: row.created_at,
+        verdict: row.verdict,
+        scoresJson: row.scores_json,
+        rationale: row.rationale,
+      }));
+  } finally {
+    db.close();
+  }
+}
+
 export function insertHumanReview(dbPath: string, row: HumanReviewRow): void {
   const db = new Database(dbPath);
   try {
