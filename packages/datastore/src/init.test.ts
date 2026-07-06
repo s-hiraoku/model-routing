@@ -31,6 +31,7 @@ describe("initializeDatabase", () => {
           "feedback_notes",
           "human_reviews",
           "judgments",
+          "preference_queue",
           "quota_events",
           "replay_runs",
           "requests",
@@ -41,6 +42,7 @@ describe("initializeDatabase", () => {
         ]);
         expect(indexes).toContain("idx_requests_created");
         expect(indexes).toContain("idx_task_events_created");
+        expect(indexes).toContain("idx_preference_queue_status");
         expect(db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
       } finally {
         db.close();
@@ -61,7 +63,7 @@ describe("initializeDatabase", () => {
       const db = new Database(dbPath, { readonly: true });
       try {
         expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM __drizzle_migrations").get()?.count).toBe(
-          6,
+          7,
         );
       } finally {
         db.close();

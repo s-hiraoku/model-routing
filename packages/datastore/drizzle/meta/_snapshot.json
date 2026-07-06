@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "507463f4-3372-47f1-94f2-7383318badb4",
+  "id": "133d7636-1b8e-44d1-8a9f-4cf8c1d7f938",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "eval_tasks": {
@@ -374,6 +374,156 @@
           "tableFrom": "judgments",
           "tableTo": "replay_runs",
           "columnsFrom": ["baseline_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "preference_queue": {
+      "name": "preference_queue",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "eval_task_id": {
+          "name": "eval_task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "candidate_run_id": {
+          "name": "candidate_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "baseline_run_id": {
+          "name": "baseline_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "priority": {
+          "name": "priority",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "due_at": {
+          "name": "due_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notified_at": {
+          "name": "notified_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "answered_at": {
+          "name": "answered_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "human_review_id": {
+          "name": "human_review_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_preference_queue_pair": {
+          "name": "idx_preference_queue_pair",
+          "columns": ["eval_task_id", "candidate_run_id", "baseline_run_id"],
+          "isUnique": true
+        },
+        "idx_preference_queue_status": {
+          "name": "idx_preference_queue_status",
+          "columns": ["status", "created_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "preference_queue_eval_task_id_eval_tasks_id_fk": {
+          "name": "preference_queue_eval_task_id_eval_tasks_id_fk",
+          "tableFrom": "preference_queue",
+          "tableTo": "eval_tasks",
+          "columnsFrom": ["eval_task_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "preference_queue_candidate_run_id_replay_runs_id_fk": {
+          "name": "preference_queue_candidate_run_id_replay_runs_id_fk",
+          "tableFrom": "preference_queue",
+          "tableTo": "replay_runs",
+          "columnsFrom": ["candidate_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "preference_queue_baseline_run_id_replay_runs_id_fk": {
+          "name": "preference_queue_baseline_run_id_replay_runs_id_fk",
+          "tableFrom": "preference_queue",
+          "tableTo": "replay_runs",
+          "columnsFrom": ["baseline_run_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "preference_queue_human_review_id_human_reviews_id_fk": {
+          "name": "preference_queue_human_review_id_human_reviews_id_fk",
+          "tableFrom": "preference_queue",
+          "tableTo": "human_reviews",
+          "columnsFrom": ["human_review_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"

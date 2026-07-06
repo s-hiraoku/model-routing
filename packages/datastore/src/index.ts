@@ -16,6 +16,14 @@ export {
   listFeedbackNotes,
 } from "./feedback-notes";
 export { defaultDatabasePath, initializeDatabase } from "./init";
+export {
+  countPreferenceQueueItemsSince,
+  insertPreferenceQueueItem,
+  listPreferenceQueue,
+  type PreferenceQueueInsert,
+  type PreferenceQueueRow,
+  type PreferenceQueueStatus,
+} from "./preference-queue";
 export { insertQuotaEvent, type QuotaEventRow } from "./quota-events";
 export {
   type HumanReviewRow,

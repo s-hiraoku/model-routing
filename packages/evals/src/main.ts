@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { defaultDatabasePath, initializeDatabase, listEvalTasksByBatch } from "@model-routing/datastore";
-import { loadEvalConfig, loadModelsConfig } from "@model-routing/shared";
+import { loadEvalConfig, loadFeedbackConfig, loadModelsConfig } from "@model-routing/shared";
 import { runAggregateStage } from "./aggregate";
 import { formatAuditTasks, listAuditTasks } from "./audit";
 import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
+import { runFeedbackStage } from "./feedback";
 import { runJudgeStage } from "./judge";
 import { runNightly } from "./nightly";
 import { runReportStage } from "./policy";
@@ -75,7 +76,7 @@ function flagBoolean(args: ParsedArgs, name: string): boolean {
 function usage(): string {
   return [
     "Usage:",
-    "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|aggregate|report|all [--llm] [--yes]",
+    "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|aggregate|report|feedback|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
     "  bun run evals -- audit-classify --n 50",
     "  bun run evals -- nightly",
@@ -178,6 +179,14 @@ async function commandRun(args: ParsedArgs): Promise<void> {
     });
     console.info(
       `report: profiles=${result.profiles} report=${result.reportPath} policy=${result.policyPath} changelog=${result.changelogPath}`,
+    );
+  }
+
+  if (stage === "feedback" || stage === "all") {
+    const feedbackConfig = await loadFeedbackConfig(flagString(args, "feedback-config", "config/feedback.yaml"));
+    const result = runFeedbackStage({ dbPath, batchId, config: feedbackConfig });
+    console.info(
+      `feedback: candidates=${result.candidates} inserted=${result.inserted} active_this_week=${result.activeThisWeek} budget=${result.budget}`,
     );
   }
 

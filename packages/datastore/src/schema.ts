@@ -169,6 +169,35 @@ export const humanReviews = sqliteTable(
   (table) => [index("idx_human_reviews_task").on(table.evalTaskId)],
 );
 
+export const preferenceQueue = sqliteTable(
+  "preference_queue",
+  {
+    id: text("id").primaryKey(),
+    batchId: text("batch_id").notNull(),
+    evalTaskId: text("eval_task_id")
+      .notNull()
+      .references(() => evalTasks.id),
+    candidateRunId: text("candidate_run_id")
+      .notNull()
+      .references(() => replayRuns.id),
+    baselineRunId: text("baseline_run_id")
+      .notNull()
+      .references(() => replayRuns.id),
+    createdAt: integer("created_at").notNull(),
+    priority: real("priority").notNull(),
+    reason: text("reason").notNull(),
+    status: text("status").notNull().default("pending"),
+    dueAt: integer("due_at"),
+    notifiedAt: integer("notified_at"),
+    answeredAt: integer("answered_at"),
+    humanReviewId: text("human_review_id").references(() => humanReviews.id),
+  },
+  (table) => [
+    uniqueIndex("idx_preference_queue_pair").on(table.evalTaskId, table.candidateRunId, table.baselineRunId),
+    index("idx_preference_queue_status").on(table.status, table.createdAt),
+  ],
+);
+
 export const tierProfiles = sqliteTable(
   "tier_profiles",
   {
