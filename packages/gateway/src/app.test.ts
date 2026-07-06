@@ -177,6 +177,13 @@ describe("gateway app", () => {
       } finally {
         db.close();
       }
+
+      const statsResponse = await app.request("http://127.0.0.1/internal/stats");
+      const stats = (await statsResponse.json()) as { requests: { total: number; byStatus: Record<string, number> } };
+
+      expect(statsResponse.status).toBe(200);
+      expect(stats.requests.total).toBe(1);
+      expect(stats.requests.byStatus.ok).toBe(1);
     } finally {
       upstream.stop(true);
       await rm(dir, { recursive: true, force: true });

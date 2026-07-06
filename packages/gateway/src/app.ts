@@ -1,6 +1,7 @@
 import {
   bodyPathForRequest,
   defaultDatabasePath,
+  getGatewayStats,
   initializeDatabase,
   insertRequestLog,
   writeZstdJson,
@@ -271,6 +272,20 @@ export function createGatewayApp(options: GatewayOptions): Hono {
       status: "ok",
       mode: resolveGatewayMode(resolvedOptions.mode),
     });
+  });
+
+  app.get("/internal/stats", (c) => {
+    if (!resolvedOptions.enableLogging) {
+      return c.json({
+        windowMs: 24 * 60 * 60 * 1000,
+        requests: { total: 0, byStatus: {} },
+        cache: { inputTokens: 0, cacheReadTokens: 0, hitRate: null },
+        models: {},
+        shifts: { byReason: {}, byGear: {} },
+      });
+    }
+
+    return c.json(getGatewayStats(resolvedOptions.dbPath));
   });
 
   app.post("/v1/messages", (c) => {
