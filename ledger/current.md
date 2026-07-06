@@ -12,13 +12,13 @@ Status: active
 - [x] `/v1/messages` metadata logging and zstd body storage
 - [x] `/internal/stats`, `/internal/task-event`, and `hooks/notify-task.ts`
 - [x] Gateway upstream error handling, hop-by-hop header cleanup, kill switch resolution
-- [ ] SSE event reconstruction and streaming E2E
-- [ ] 429 quota_events recording
-- [ ] `scripts/prune.ts` and `scripts/log-explorer.ts`
+- [x] SSE event reconstruction and streaming E2E
+- [x] 429 quota_events recording
+- [x] `scripts/prune.ts` and `scripts/log-explorer.ts`
 - [ ] Repository verification and commits
 - [ ] Operational gate notes for `ANTHROPIC_BASE_URL` and one-week run
 
 ## Notes
 
 - 2026-07-06: M0 code is partially complete. Operational one-week run cannot be completed inside the current coding session and must remain an external gate.
-
+- 2026-07-06: Added SSE reconstruction, 429 quota_events, and prune/log-explorer scripts with tests.

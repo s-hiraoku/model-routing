@@ -11,6 +11,8 @@
     "db-init": "bun scripts/db-init.ts",
     "gateway": "bun packages/gateway/src/main.ts",
     "lint": "biome check .",
+    "log-explorer": "bun scripts/log-explorer.ts",
+    "prune": "bun scripts/prune.ts",
     "spike:rewrite": "bun scripts/spike-rewrite.ts",
     "test": "bun test"
   },

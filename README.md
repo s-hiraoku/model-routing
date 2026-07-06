@@ -92,6 +92,9 @@ bun run db-init
 bun test
 bun run lint
 bun run gateway              # localhost:8484, passthrough + /v1/messages metadata logging
+bun run log-explorer -- recent --limit=20
+bun run log-explorer -- stats
+bun run prune -- --dry-run
 ```
 
 Claude Code の `UserPromptSubmit` hook には、必要に応じて以下を登録する。
