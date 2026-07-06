@@ -81,6 +81,25 @@ export const shiftEvents = sqliteTable("shift_events", {
   reason: text("reason").notNull(),
 });
 
+export const evalTasks = sqliteTable(
+  "eval_tasks",
+  {
+    id: text("id").primaryKey(),
+    taskEventId: text("task_event_id")
+      .notNull()
+      .references(() => taskEvents.id),
+    batchId: text("batch_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    taskCategory: text("task_category").notNull(),
+    repoPath: text("repo_path").notNull(),
+    baseCommit: text("base_commit").notNull(),
+    promptText: text("prompt_text").notNull(),
+    verifyCommand: text("verify_command"),
+    status: text("status").notNull().default("pending"),
+  },
+  (table) => [index("idx_eval_tasks_batch").on(table.batchId, table.status)],
+);
+
 export const quotaEvents = sqliteTable(
   "quota_events",
   {

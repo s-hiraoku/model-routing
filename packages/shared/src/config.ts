@@ -27,3 +27,49 @@ export async function loadModelsConfig(path = "config/models.yaml"): Promise<Mod
   const contents = await readFile(path, "utf8");
   return modelsConfigSchema.parse(parse(contents));
 }
+
+export const evalConfigSchema = z.object({
+  sampling: z.object({
+    per_batch: z.number().int().positive(),
+    per_category_min: z.number().int().nonnegative(),
+    self_contained_only: z.boolean().default(true),
+    max_task_prompt_chars: z.number().int().positive(),
+    dedup_window_days: z.number().int().positive(),
+    exclude_repos: z.array(z.string()).default([]),
+  }),
+  replay: z.object({
+    variants: z.array(z.object({ id: z.string().min(1) })).min(1),
+    baseline: z.string().min(1),
+    isolation: z.string().min(1),
+    timeout_minutes: z.number().int().positive(),
+    concurrency: z.number().int().positive(),
+    verify_commands: z.record(z.string(), z.string()).default({}),
+    setup_commands: z.record(z.string(), z.string()).default({}),
+  }),
+  judge: z.object({
+    primary: z.string().min(1),
+    position_swap: z.boolean(),
+  }),
+  human_review: z.object({
+    sample_rate: z.number().min(0).max(1),
+    low_margin_always: z.boolean(),
+  }),
+  schedule: z.object({
+    allowed_hours: z.array(z.number().int().min(0).max(23)).default([]),
+    pause_on_rate_limit: z.boolean().default(true),
+  }),
+  policy_generation: z.object({
+    demote_min_n: z.number().int().positive(),
+    demote_wilson_low: z.number().min(0).max(1),
+    promote_min_n: z.number().int().positive(),
+    promote_wilson_low: z.number().min(0).max(1),
+    min_kappa: z.number().min(0).max(1),
+  }),
+});
+
+export type EvalConfig = z.infer<typeof evalConfigSchema>;
+
+export async function loadEvalConfig(path = "config/eval.yaml"): Promise<EvalConfig> {
+  const contents = await readFile(path, "utf8");
+  return evalConfigSchema.parse(parse(contents));
+}

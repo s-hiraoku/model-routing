@@ -1,0 +1,209 @@
+import { readFile } from "node:fs/promises";
+import { defaultDatabasePath, initializeDatabase, listEvalTasksByBatch } from "@model-routing/datastore";
+import { loadEvalConfig, loadModelsConfig } from "@model-routing/shared";
+import { formatAuditTasks, listAuditTasks } from "./audit";
+import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
+import { formatM1Report, getM1Report } from "./report";
+import { estimateRuns, sampleTasks } from "./sample";
+import { assertAllowedHour } from "./schedule";
+import { runAgentSdkSmoke } from "./smoke";
+
+type ParsedArgs = {
+  command: string;
+  positionals: string[];
+  flags: Map<string, string | boolean>;
+};
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const [command = "help", ...rest] = argv;
+  const positionals: string[] = [];
+  const flags = new Map<string, string | boolean>();
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+
+    const [key, inlineValue] = arg.slice(2).split("=", 2);
+    if (inlineValue != null) {
+      flags.set(key, inlineValue);
+      continue;
+    }
+
+    const next = rest[index + 1];
+    if (next && !next.startsWith("--")) {
+      flags.set(key, next);
+      index += 1;
+    } else {
+      flags.set(key, true);
+    }
+  }
+
+  return { command, positionals, flags };
+}
+
+function flagString(args: ParsedArgs, name: string, fallback: string): string {
+  const value = args.flags.get(name);
+  return typeof value === "string" ? value : fallback;
+}
+
+function flagNumber(args: ParsedArgs, name: string, fallback: number): number {
+  const value = args.flags.get(name);
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`--${name} must be a number`);
+  }
+
+  return parsed;
+}
+
+function flagBoolean(args: ParsedArgs, name: string): boolean {
+  return args.flags.get(name) === true;
+}
+
+function usage(): string {
+  return [
+    "Usage:",
+    "  bun run evals -- run --batch <id> --stage classify|sample|all [--llm] [--yes]",
+    "  bun run evals -- estimate --batch <id>",
+    "  bun run evals -- audit-classify --n 50",
+    "  bun run evals -- report",
+    "  bun run smoke",
+  ].join("\n");
+}
+
+async function commandRun(args: ParsedArgs): Promise<void> {
+  const stage = flagString(args, "stage", "all");
+  const batchId = flagString(args, "batch", "");
+  if (!batchId) {
+    throw new Error("--batch is required");
+  }
+
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  const config = await loadEvalConfig(flagString(args, "config", "config/eval.yaml"));
+  const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
+  initializeDatabase(dbPath);
+
+  if (flagBoolean(args, "respect-schedule")) {
+    assertAllowedHour(new Date(), config.schedule.allowed_hours);
+  }
+
+  if (stage === "classify" || stage === "all") {
+    const limit = flagNumber(args, "limit", 100);
+    const llmClassifier = flagBoolean(args, "llm")
+      ? await createAgentSdkClassifier({
+          model: lowTierModel(models),
+          gatewayBaseUrl: flagString(args, "gateway", ""),
+          promptTemplate: await readFile(flagString(args, "prompt", "config/prompts/classify-v1.md"), "utf8"),
+        })
+      : undefined;
+    const result = await classifyTasks({ dbPath, limit, llmClassifier });
+    console.info(
+      `classify: scanned=${result.scanned} updated=${result.updated} llm_used=${result.llmUsed}${
+        llmClassifier ? "" : " (heuristic-only; pass --llm to classify unknown/low-confidence tasks)"
+      }`,
+    );
+  }
+
+  if (stage === "sample" || stage === "all") {
+    const result = sampleTasks({
+      dbPath,
+      batchId,
+      config,
+      evalRunsPerWindow: models.subscription.eval_runs_per_window,
+      dryRun: !flagBoolean(args, "yes"),
+    });
+
+    if (!flagBoolean(args, "yes")) {
+      console.info("sample: dry run; pass --yes to insert eval_tasks.");
+    }
+
+    console.info(
+      `sample: inserted=${result.inserted} existing=${result.alreadyPresent} tasks=${result.estimate.tasks} total_runs=${result.estimate.totalRuns} estimated_windows=${result.estimate.estimatedWindows}`,
+    );
+  }
+
+  if (stage === "all") {
+    console.info(formatM1Report(getM1Report(dbPath)));
+  }
+}
+
+async function commandEstimate(args: ParsedArgs): Promise<void> {
+  const batchId = flagString(args, "batch", "");
+  if (!batchId) {
+    throw new Error("--batch is required");
+  }
+
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  const config = await loadEvalConfig(flagString(args, "config", "config/eval.yaml"));
+  const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
+  initializeDatabase(dbPath);
+  const existing = listEvalTasksByBatch(dbPath, batchId).length;
+  const taskCount = existing || config.sampling.per_batch;
+  const estimate = estimateRuns(taskCount, config.replay.variants.length, models.subscription.eval_runs_per_window);
+
+  console.info(
+    `estimate: tasks=${estimate.tasks} replay_runs=${estimate.replayRuns} judge_runs=${estimate.judgeRuns} total_runs=${estimate.totalRuns} estimated_windows=${estimate.estimatedWindows}`,
+  );
+}
+
+async function commandAuditClassify(args: ParsedArgs): Promise<void> {
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  const n = flagNumber(args, "n", 50);
+  initializeDatabase(dbPath);
+  console.info(formatAuditTasks(listAuditTasks(dbPath, n)));
+}
+
+async function commandReport(args: ParsedArgs): Promise<void> {
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  initializeDatabase(dbPath);
+  console.info(formatM1Report(getM1Report(dbPath)));
+}
+
+async function commandSmoke(args: ParsedArgs): Promise<void> {
+  const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
+  const result = await runAgentSdkSmoke({
+    model: flagString(args, "model", models.tiers.low.model),
+    gatewayBaseUrl: flagString(args, "gateway", ""),
+    cwd: flagString(args, "cwd", process.cwd()),
+  });
+
+  console.info(`smoke: ${result}`);
+}
+
+export async function main(argv = Bun.argv.slice(2)): Promise<void> {
+  const args = parseArgs(argv);
+
+  switch (args.command) {
+    case "run":
+      await commandRun(args);
+      return;
+    case "estimate":
+      await commandEstimate(args);
+      return;
+    case "audit-classify":
+      await commandAuditClassify(args);
+      return;
+    case "report":
+      await commandReport(args);
+      return;
+    case "smoke":
+      await commandSmoke(args);
+      return;
+    default:
+      console.info(usage());
+  }
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

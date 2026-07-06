@@ -1,26 +1,39 @@
 # Current Goal
 
-Goal: Complete M0 implementation for model-routing as far as feasible in code: finish gateway passthrough logging, SSE reconstruction/streaming tests, task hooks, stats, quota/error handling, prune/log explorer scripts, docs, verification, commits, and clearly record any operational M0 gates that cannot be completed in-session.
+Goal: Complete the planned model-routing implementation beyond M0, progressing milestone by milestone from M1 through M5 where feasible, with durable ledger updates, tests, docs, commits, and pushes after completed slices.
 Owner: Codex
 Started: 2026-07-06
-Status: code-complete; operational gate pending
+Status: M1 in progress
+
+## Current Milestone: M1 Classification, Sampling, and Log Exploration
+
+Success criteria:
+
+- `packages/evals` exists with an idempotent stage runner and CLI entrypoint.
+- `datastore` includes `eval_tasks` via Drizzle schema and generated migration, with repositories/tests.
+- Stage 1 classify can update task categories and self-contained flags, using heuristic logic locally and an Agent SDK seam for LLM classification.
+- Stage 2 sample can create `eval_tasks` with dedup, dirty filtering, per-category limits, and quota estimate output.
+- `audit-classify` CLI can display recent classified tasks for manual spot checks.
+- `bun run smoke` provides the Agent SDK/gateway connectivity check seam.
+- Docs/config/scripts are updated and repository verification passes.
 
 ## Plan
 
-- [x] Day 1 OAuth model rewrite spike and decisions record
-- [x] Bun workspace, Biome, gateway skeleton, datastore init
-- [x] `/v1/messages` metadata logging and zstd body storage
-- [x] `/internal/stats`, `/internal/task-event`, and `hooks/notify-task.ts`
-- [x] Gateway upstream error handling, hop-by-hop header cleanup, kill switch resolution
-- [x] SSE event reconstruction and streaming E2E
-- [x] 429 quota_events recording
-- [x] `scripts/prune.ts` and `scripts/log-explorer.ts`
-- [x] Repository verification and commits
-- [x] Operational gate notes for `ANTHROPIC_BASE_URL` and one-week run
+- [x] Finish M0 code and review follow-ups
+- [x] Add M1 datastore schema/repositories for `eval_tasks`
+- [x] Add `config/eval.yaml` and prompt files with Zod validation
+- [x] Add `packages/evals` CLI runner and stage selection
+- [x] Implement stage 1 classify
+- [x] Implement stage 2 sample and estimate
+- [x] Implement `audit-classify` and smoke command
+- [x] Add M1 category/dirty/self-contained report
+- [x] Update docs/README for M1 commands
+- [x] Run verification, commit, and push
 
 ## Notes
 
-- 2026-07-06: M0 code is partially complete. Operational one-week run cannot be completed inside the current coding session and must remain an external gate.
-- 2026-07-06: Added SSE reconstruction, 429 quota_events, and prune/log-explorer scripts with tests.
-- 2026-07-06: Verified `ANTHROPIC_BASE_URL=http://127.0.0.1:18486 claude -p "1+1は? 一言で答えて。"` through the gateway. It completed and logged ok requests. Manually invoked `hooks/notify-task.ts`; task_events recorded git_head, git_dirty=0, and category docs.
-- 2026-07-06: Adjusted stats cache hit rate to `cache_read / (input + cache_read)` after real usage showed cache_read can exceed non-cache input_tokens.
+- 2026-07-06: M0 code completed and pushed. Operational 1-week M0 gate remains external/time-based.
+- 2026-07-06: Review follow-ups fixed and pushed: Drizzle generated migration is now the db-init source, and Haiku demotion succeeds when stripping `output_config.effort`.
+- 2026-07-06: M1 started. First implementation slice will add `eval_tasks` and evals runner scaffolding, then classify/sample commands.
+- 2026-07-06: Added `eval_tasks`, eval config/prompt, `packages/evals` classify/sample/audit/report/smoke commands, dry-run sampling guard, and schedule guard seam. Targeted M1 tests passed before full verification.
+- 2026-07-06: Verification passed: `bun test` (55 pass), `bun run lint`, `bun run evals -- report` and `estimate` against an empty temp DB, and `bun run smoke -- --gateway=http://127.0.0.1:18489` through a temporary gateway.

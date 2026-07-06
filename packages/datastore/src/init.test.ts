@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { defaultDatabasePath, initializeDatabase } from "./init";
 
 describe("initializeDatabase", () => {
-  test("creates M0 tables and enables WAL mode", async () => {
+  test("creates current tables and enables WAL mode", async () => {
     const dir = await mkdtemp(join(tmpdir(), "model-routing-db-"));
     const dbPath = join(dir, "model-routing.db");
 
@@ -26,7 +26,7 @@ describe("initializeDatabase", () => {
           .all()
           .map((row) => row.name);
 
-        expect(tables).toEqual(["quota_events", "requests", "sessions", "shift_events", "task_events"]);
+        expect(tables).toEqual(["eval_tasks", "quota_events", "requests", "sessions", "shift_events", "task_events"]);
         expect(indexes).toContain("idx_requests_created");
         expect(indexes).toContain("idx_task_events_created");
         expect(db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
@@ -49,7 +49,7 @@ describe("initializeDatabase", () => {
       const db = new Database(dbPath, { readonly: true });
       try {
         expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM __drizzle_migrations").get()?.count).toBe(
-          1,
+          2,
         );
       } finally {
         db.close();

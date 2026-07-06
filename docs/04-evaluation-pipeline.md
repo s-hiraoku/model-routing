@@ -236,10 +236,14 @@ error_rate
 ## CLI まとめ
 
 ```bash
-bun run evals -- run --batch 2026-W28 --stage all
+bun run evals -- run --batch 2026-W28 --stage all --yes
+bun run evals -- run --batch 2026-W28 --stage classify --llm
 bun run evals -- run --batch 2026-W28 --stage judge   # 特定 stage のみ
 bun run evals -- audit-classify --n 50
 bun run evals -- estimate --batch 2026-W28            # 枠見積もりのみ
+bun run evals -- report                               # M1 母数レポート
 bun run smoke                                         # Agent SDK 疎通(バッチ前必須)
 bun run review-ui
 ```
+
+M1 時点では `classify` はデフォルトでヒューリスティックのみ実行する。`--llm` を付けると unknown / confidence < 0.8 の task_events を Claude Agent SDK(low tier、ツール無効)へ送る。`sample` は `--yes` なしでは dry run として枠見積もりだけを表示する。

@@ -1,4 +1,11 @@
-export { loadModelsConfig, type ModelsConfig, modelsConfigSchema } from "./config";
+export {
+  type EvalConfig,
+  evalConfigSchema,
+  loadEvalConfig,
+  loadModelsConfig,
+  type ModelsConfig,
+  modelsConfigSchema,
+} from "./config";
 
 export type Tier = "high" | "mid" | "low";
 

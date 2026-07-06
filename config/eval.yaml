@@ -1,0 +1,39 @@
+sampling:
+  per_batch: 20
+  per_category_min: 3
+  self_contained_only: true
+  max_task_prompt_chars: 8000
+  dedup_window_days: 30
+  exclude_repos: []
+
+replay:
+  variants:
+    - id: high
+    - id: mid
+    - id: low
+    - id: mid+demote
+  baseline: mid
+  isolation: worktree
+  timeout_minutes: 15
+  concurrency: 1
+  verify_commands: {}
+  setup_commands: {}
+
+judge:
+  primary: high
+  position_swap: true
+
+human_review:
+  sample_rate: 0.25
+  low_margin_always: true
+
+schedule:
+  allowed_hours: [0, 1, 2, 3, 4, 5, 22, 23]
+  pause_on_rate_limit: true
+
+policy_generation:
+  demote_min_n: 10
+  demote_wilson_low: 0.4
+  promote_min_n: 10
+  promote_wilson_low: 0.55
+  min_kappa: 0.6
