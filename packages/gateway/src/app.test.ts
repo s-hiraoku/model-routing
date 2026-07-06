@@ -269,9 +269,9 @@ describe("gateway app", () => {
         expect(row.cache_read_tokens).toBe(3);
 
         const stored = (await readZstdJson(row.body_path)) as {
-          response?: { content?: Array<{ text?: string }> };
+          response?: { body?: { content?: Array<{ text?: string }> } };
         };
-        expect(stored.response?.content?.[0]?.text).toBe("ok");
+        expect(stored.response?.body?.content?.[0]?.text).toBe("ok");
       } finally {
         db.close();
       }
@@ -321,6 +321,126 @@ describe("gateway app", () => {
 
         expect(request?.status).toBe("rate_limited");
         expect(quota).toEqual({ kind: "rate_limited", ref_id: request?.id });
+      } finally {
+        db.close();
+      }
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("stores only allowlisted headers in body logs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-headers-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        return Response.json(
+          { id: "msg_1", model: "claude-fable-5" },
+          {
+            headers: {
+              "anthropic-version": "2023-06-01",
+              authorization: "Bearer upstream-secret",
+            },
+          },
+        );
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+      });
+
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: {
+          "anthropic-beta": "test-beta",
+          authorization: "Bearer secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const row = await waitFor(() =>
+          db.query<{ body_path: string }, []>("SELECT body_path FROM requests LIMIT 1").get(),
+        );
+        const stored = (await readZstdJson(row.body_path)) as {
+          request?: { headers?: Record<string, string> };
+          response?: { headers?: Record<string, string> };
+        };
+
+        expect(stored.request?.headers).toEqual({ "anthropic-beta": "test-beta" });
+        expect(stored.response?.headers).toEqual({ "anthropic-version": "2023-06-01" });
+      } finally {
+        db.close();
+      }
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("records client_abort when the incoming signal aborts upstream fetch", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-abort-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch() {
+        await Bun.sleep(1000);
+        return Response.json({ ok: true });
+      },
+    });
+    const controller = new AbortController();
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+      });
+      const request = new Request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+        signal: controller.signal,
+      });
+
+      const responsePromise = app.request(request);
+      controller.abort();
+      const response = await responsePromise;
+
+      expect(response.status).toBe(499);
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const row = await waitFor(() =>
+          db
+            .query<{ status: string; http_status: number | null }, []>(
+              "SELECT status, http_status FROM requests LIMIT 1",
+            )
+            .get(),
+        );
+        expect(row).toEqual({ status: "client_abort", http_status: null });
       } finally {
         db.close();
       }

@@ -121,6 +121,7 @@ async function logMessagesRequest(args: {
   requestId: string;
   startedAt: number;
   rawRequestBody: string;
+  requestHeaders: Headers;
   responseBody: ReadableStream<Uint8Array> | null;
   upstreamResponse: Response;
 }): Promise<void> {
@@ -130,8 +131,14 @@ async function logMessagesRequest(args: {
   const bodyPath = bodyPathForRequest(args.dataDir, args.requestId, new Date(args.startedAt));
 
   await writeZstdJson(bodyPath, {
-    request: parseJsonOrRaw(args.rawRequestBody),
-    response: response.payload,
+    request: {
+      headers: allowedLogHeaders(args.requestHeaders),
+      body: parseJsonOrRaw(args.rawRequestBody),
+    },
+    response: {
+      headers: allowedLogHeaders(args.upstreamResponse.headers),
+      body: response.payload,
+    },
   });
 
   const status = requestStatus(args.upstreamResponse.status);
@@ -179,14 +186,22 @@ async function logMessagesGatewayError(args: {
   requestId: string;
   startedAt: number;
   rawRequestBody: string;
+  requestHeaders: Headers;
   error: Error;
+  status: "gateway_error" | "client_abort";
 }): Promise<void> {
   const features = extractRequestFeatures(args.rawRequestBody);
   const bodyPath = bodyPathForRequest(args.dataDir, args.requestId, new Date(args.startedAt));
 
   await writeZstdJson(bodyPath, {
-    request: parseJsonOrRaw(args.rawRequestBody),
-    response: { error: args.error.message },
+    request: {
+      headers: allowedLogHeaders(args.requestHeaders),
+      body: parseJsonOrRaw(args.rawRequestBody),
+    },
+    response: {
+      headers: {},
+      body: { error: args.error.message },
+    },
   });
 
   insertRequestLog(args.dbPath, {
@@ -207,8 +222,8 @@ async function logMessagesGatewayError(args: {
     outputTokens: null,
     cacheReadTokens: null,
     cacheWriteTokens: null,
-    status: "gateway_error",
-    httpStatus: 502,
+    status: args.status,
+    httpStatus: args.status === "client_abort" ? null : 502,
     stopReason: null,
     latencyMs: Date.now() - args.startedAt,
     ttftMs: null,
@@ -220,6 +235,23 @@ async function logMessagesGatewayError(args: {
 function gatewayErrorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : "unknown upstream error";
   return Response.json({ error: message }, { status: 502 });
+}
+
+function allowedLogHeaders(headers: Headers): Record<string, string> {
+  const allowed = new Set(["user-agent", "anthropic-version", "anthropic-beta"]);
+  const logged: Record<string, string> = {};
+
+  for (const [name, value] of headers) {
+    if (allowed.has(name.toLowerCase())) {
+      logged[name.toLowerCase()] = value;
+    }
+  }
+
+  return logged;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 const taskEventSchema = z.object({
@@ -243,6 +275,10 @@ async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<R
       redirect: "manual",
     });
   } catch (error) {
+    if (isAbortError(error)) {
+      return new Response(null, { status: 499 });
+    }
+
     return gatewayErrorResponse(error);
   }
 
@@ -266,6 +302,7 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
     });
   } catch (error) {
     const normalizedError = error instanceof Error ? error : new Error("unknown upstream error");
+    const status = isAbortError(error) ? "client_abort" : "gateway_error";
 
     void logMessagesGatewayError({
       dataDir: options.dataDir,
@@ -273,8 +310,14 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
       requestId,
       startedAt,
       rawRequestBody,
+      requestHeaders: req.headers,
       error: normalizedError,
+      status,
     }).catch((logError) => console.warn(`[gateway] request log failed: ${logError}`));
+
+    if (status === "client_abort") {
+      return new Response(null, { status: 499 });
+    }
 
     return gatewayErrorResponse(normalizedError);
   }
@@ -286,6 +329,7 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
       requestId,
       startedAt,
       rawRequestBody,
+      requestHeaders: req.headers,
       responseBody: null,
       upstreamResponse,
     }).catch((error) => console.warn(`[gateway] request log failed: ${error}`));
@@ -301,6 +345,7 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
     requestId,
     startedAt,
     rawRequestBody,
+    requestHeaders: req.headers,
     responseBody: logBody,
     upstreamResponse,
   }).catch((error) => console.warn(`[gateway] request log failed: ${error}`));
