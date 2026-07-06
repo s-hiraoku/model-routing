@@ -125,6 +125,8 @@
 - [ ] 満足度チェック(月 1 問): 通知 → 満足度ページ → 「止めたい」は即 passthrough 化
 - [ ] `bun run policy -- rollback <version>`(即時巻き戻し)
 
+M5 の初期実装では `config/feedback.yaml` の Zod loader、`bun run evals -- nightly` の日次 Markdown、`bun run policy -- rollback <policy-file>` を先に提供する。通知・自動 suspend・提案承認 UI はこの基盤に後続で接続する。
+
 ### 継続較正
 
 - [ ] 枠モデル較正: quota_events 実測から window_burn 推定・eval_runs_per_window を調整

@@ -244,6 +244,7 @@ bun run evals -- run --batch 2026-W28 --stage replay --gateway=http://localhost:
 bun run evals -- run --batch 2026-W28 --stage judge   # 特定 stage のみ
 bun run evals -- run --batch 2026-W28 --stage aggregate
 bun run evals -- run --batch 2026-W28 --stage report --existing-policy config/shift-policy.yaml
+bun run evals -- nightly
 bun run evals -- audit-classify --n 50
 bun run evals -- estimate --batch 2026-W28            # 枠見積もりのみ
 bun run evals -- report                               # M1 母数レポート
@@ -258,3 +259,5 @@ M2 の `replay` は `eval_tasks` ごとに configured variant の `replay_runs` 
 M2 の `judge` は `replay_runs.status = 'ok'` の baseline(mid) と各 non-baseline run を比較し、`judgments` に `candidate_win` / `baseline_win` / `tie` を保存する。`judge.position_swap = true` の場合は candidate-first / baseline-first の 2 件を作り、既存 judgment は `(eval_task_id, candidate_run_id, position)` でスキップする。ジャッジには Agent SDK の `outputFormat: json_schema`、`tools: []`、`maxTurns: 1` を使い、JSON パース失敗時は 1 回リトライする。
 
 M3 の `aggregate` は position swap の judge 不一致を `tie` とし、同じペアに `human_reviews` がある場合は最新の人間判定を採用して `tier_profiles` を upsert する。`report` は `tier_profiles` から Markdown レポート、policy changelog JSON、shift-policy 候補を生成する。policy 生成は `eval.yaml` の `policy_generation` 閾値と κ を満たすものだけを採用し、`--existing-policy` の `overrides` を保持する。
+
+M5 の `nightly` は既存ログから訂正マーカー、未知モデル、shift 後エラーを集計し、日次 Markdown を `data/reports/` に書き出す。これは自動ロールバック前の監視基盤で、実際の rule suspend は後続ループで changelog と通知に接続する。

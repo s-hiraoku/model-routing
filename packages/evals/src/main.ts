@@ -5,6 +5,7 @@ import { runAggregateStage } from "./aggregate";
 import { formatAuditTasks, listAuditTasks } from "./audit";
 import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
 import { runJudgeStage } from "./judge";
+import { runNightly } from "./nightly";
 import { runReportStage } from "./policy";
 import { runReplayStage } from "./replay";
 import { formatM1Report, getM1Report } from "./report";
@@ -77,6 +78,7 @@ function usage(): string {
     "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|aggregate|report|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
     "  bun run evals -- audit-classify --n 50",
+    "  bun run evals -- nightly",
     "  bun run evals -- report",
     "  bun run smoke",
   ].join("\n");
@@ -216,6 +218,19 @@ async function commandReport(args: ParsedArgs): Promise<void> {
   console.info(formatM1Report(getM1Report(dbPath)));
 }
 
+async function commandNightly(args: ParsedArgs): Promise<void> {
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
+  initializeDatabase(dbPath);
+  const result = await runNightly({
+    dbPath,
+    models,
+    reportDir: flagString(args, "report-dir", "data/reports"),
+  });
+
+  console.info(`nightly: report=${result.reportPath}`);
+}
+
 async function commandSmoke(args: ParsedArgs): Promise<void> {
   const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
   const result = await runAgentSdkSmoke({
@@ -239,6 +254,9 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
       return;
     case "audit-classify":
       await commandAuditClassify(args);
+      return;
+    case "nightly":
+      await commandNightly(args);
       return;
     case "report":
       await commandReport(args);

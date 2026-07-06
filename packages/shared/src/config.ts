@@ -73,3 +73,24 @@ export async function loadEvalConfig(path = "config/eval.yaml"): Promise<EvalCon
   const contents = await readFile(path, "utf8");
   return evalConfigSchema.parse(parse(contents));
 }
+
+export const feedbackConfigSchema = z.object({
+  attention_budget: z.object({
+    max_push_questions_per_week: z.number().int().nonnegative(),
+    satisfaction_check_days: z.number().int().positive(),
+  }),
+  notifications: z.object({
+    enabled: z.boolean(),
+    review_ui_url: z.string().url(),
+  }),
+  rollback: z.object({
+    keep_policy_versions: z.number().int().positive(),
+  }),
+});
+
+export type FeedbackConfig = z.infer<typeof feedbackConfigSchema>;
+
+export async function loadFeedbackConfig(path = "config/feedback.yaml"): Promise<FeedbackConfig> {
+  const contents = await readFile(path, "utf8");
+  return feedbackConfigSchema.parse(parse(contents));
+}

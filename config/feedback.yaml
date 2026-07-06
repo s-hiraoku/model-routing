@@ -1,0 +1,10 @@
+attention_budget:
+  max_push_questions_per_week: 3
+  satisfaction_check_days: 30
+
+notifications:
+  enabled: true
+  review_ui_url: "http://127.0.0.1:8585"
+
+rollback:
+  keep_policy_versions: 10

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadEvalConfig, loadModelsConfig } from "./config";
+import { loadEvalConfig, loadFeedbackConfig, loadModelsConfig } from "./config";
 
 describe("loadModelsConfig", () => {
   test("loads and validates models yaml", async () => {
@@ -34,5 +34,14 @@ describe("loadEvalConfig", () => {
     expect(config.sampling.per_batch).toBe(20);
     expect(config.replay.variants.map((variant) => variant.id)).toContain("mid+demote");
     expect(config.schedule.allowed_hours).toContain(23);
+  });
+});
+
+describe("loadFeedbackConfig", () => {
+  test("loads and validates feedback yaml", async () => {
+    const config = await loadFeedbackConfig("config/feedback.yaml");
+
+    expect(config.attention_budget.max_push_questions_per_week).toBe(3);
+    expect(config.notifications.review_ui_url).toBe("http://127.0.0.1:8585");
   });
 });

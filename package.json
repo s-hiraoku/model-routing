@@ -14,6 +14,7 @@
     "gateway": "bun packages/gateway/src/main.ts",
     "lint": "biome check .",
     "log-explorer": "bun scripts/log-explorer.ts",
+    "policy": "bun scripts/policy.ts",
     "prune": "bun scripts/prune.ts",
     "review-ui": "bun packages/review-ui/src/main.tsx",
     "smoke": "bun packages/evals/src/main.ts smoke",

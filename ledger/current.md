@@ -3,16 +3,15 @@
 Goal: Complete the planned model-routing implementation beyond M0, progressing milestone by milestone from M1 through M5 where feasible, with durable ledger updates, tests, docs, commits, and pushes after completed slices.
 Owner: Codex
 Started: 2026-07-06
-Status: M4 in progress
+Status: M5 in progress
 
-## Current Milestone: M4 Production Shifting
+## Current Milestone: M5 Self-Evolution Foundations
 
 Success criteria:
 
-- Gateway applies production shift-policy only in explicit `MODEL_ROUTING_MODE=shifting`.
-- Missing/invalid policy, unknown tier, never_touch, and kill switch all hold/passthrough.
-- Shifted 4xx responses retry the original body once and record `degrade_guard`.
-- SIGHUP reloads `SHIFT_POLICY` without restarting gateway.
+- `config/feedback.yaml` is validated and exposes attention budget / notification defaults.
+- Nightly reporting summarizes correction-like prompts, unknown models, and shifted errors.
+- Policy rollback CLI restores a versioned policy file safely.
 - Repository verification passes before each pushed slice.
 
 ## Plan
@@ -43,7 +42,11 @@ Success criteria:
 - [x] Add shifted 4xx transparent retry and degrade_guard logging
 - [x] Add SIGHUP policy reload in gateway main
 - [x] Add rollout/stats polish for cache comparison and operational notes
-- [ ] Run verification, commit, and push M4 slice
+- [x] Run verification, commit, and push M4 slice
+- [x] Add feedback config loader
+- [x] Add nightly monitoring report
+- [x] Add policy rollback CLI
+- [ ] Run verification, commit, and push M5 slice
 
 ## Notes
 
@@ -63,3 +66,5 @@ Success criteria:
 - 2026-07-06: M3 implementation slice pushed as `079d88c`. Verification passed: `bun test` (75 pass), `bun run lint`, and empty-DB aggregate/report CLI. M3 operational gate remains external: accumulate real batches and inspect generated policy conclusions.
 - 2026-07-06: Added M4 production shifting integration behind `MODEL_ROUTING_MODE=shifting`, `SHIFT_POLICY` loading with SIGHUP reload, policy-driven model rewrite, and shifted 4xx original-body retry recorded as `degrade_guard`.
 - 2026-07-06: Extended gateway stats with shifted vs unshifted cache hit rates for rollout comparison.
+- 2026-07-06: M4 implementation slices pushed through `a6bef4e`. Verification passed: `bun test` (77 pass) and `bun run lint`. M4 operational gate remains external: run shifting for staged windows and compare quality/error/cache metrics.
+- 2026-07-06: Added M5 foundations: feedback config loader, nightly Markdown report for correction-like tasks / unknown models / shifted errors, and policy rollback CLI.
