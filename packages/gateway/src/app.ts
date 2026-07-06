@@ -5,7 +5,7 @@ import {
   insertRequestLog,
   writeZstdJson,
 } from "@model-routing/datastore";
-import { buildClientResponse, type GatewayMode, uuidv7 } from "@model-routing/shared";
+import { buildClientResponse, type GatewayMode, resolveGatewayMode, uuidv7 } from "@model-routing/shared";
 import { Hono } from "hono";
 import { extractRequestFeatures } from "./features";
 
@@ -25,9 +25,29 @@ function buildUpstreamUrl(requestUrl: string, upstreamBase: string): string {
 function buildUpstreamHeaders(requestHeaders: Headers, upstreamBase: string): Headers {
   const headers = new Headers(requestHeaders);
   const upstream = new URL(upstreamBase);
+  const connectionHeader = headers.get("connection");
 
   headers.set("host", upstream.host);
   headers.delete("content-length");
+
+  if (connectionHeader) {
+    for (const headerName of connectionHeader.split(",")) {
+      headers.delete(headerName.trim());
+    }
+  }
+
+  for (const headerName of [
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+  ]) {
+    headers.delete(headerName);
+  }
 
   return headers;
 }
@@ -106,14 +126,69 @@ async function logMessagesRequest(args: {
   });
 }
 
-async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<Response> {
-  const upstreamResponse = await fetch(buildUpstreamUrl(req.url, options.upstream), {
-    method: req.method,
-    headers: buildUpstreamHeaders(req.headers, options.upstream),
-    body: req.method === "GET" || req.method === "HEAD" ? null : req.body,
-    signal: req.signal,
-    redirect: "manual",
+async function logMessagesGatewayError(args: {
+  dataDir: string;
+  dbPath: string;
+  requestId: string;
+  startedAt: number;
+  rawRequestBody: string;
+  error: Error;
+}): Promise<void> {
+  const features = extractRequestFeatures(args.rawRequestBody);
+  const bodyPath = bodyPathForRequest(args.dataDir, args.requestId, new Date(args.startedAt));
+
+  await writeZstdJson(bodyPath, {
+    request: parseJsonOrRaw(args.rawRequestBody),
+    response: { error: args.error.message },
   });
+
+  insertRequestLog(args.dbPath, {
+    id: args.requestId,
+    sessionId: null,
+    replayRunId: null,
+    createdAt: args.startedAt,
+    modelRequested: features.modelRequested,
+    modelServed: features.modelRequested,
+    isStreaming: features.isStreaming,
+    messageCount: features.messageCount,
+    toolCount: features.toolCount,
+    hasToolResults: features.hasToolResults,
+    hasImages: features.hasImages,
+    systemHash: features.systemHash,
+    promptHash: features.promptHash,
+    inputTokens: null,
+    outputTokens: null,
+    cacheReadTokens: null,
+    cacheWriteTokens: null,
+    status: "gateway_error",
+    httpStatus: 502,
+    stopReason: null,
+    latencyMs: Date.now() - args.startedAt,
+    ttftMs: null,
+    errorMessage: args.error.message,
+    bodyPath,
+  });
+}
+
+function gatewayErrorResponse(error: unknown): Response {
+  const message = error instanceof Error ? error.message : "unknown upstream error";
+  return Response.json({ error: message }, { status: 502 });
+}
+
+async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<Response> {
+  let upstreamResponse: Response;
+
+  try {
+    upstreamResponse = await fetch(buildUpstreamUrl(req.url, options.upstream), {
+      method: req.method,
+      headers: buildUpstreamHeaders(req.headers, options.upstream),
+      body: req.method === "GET" || req.method === "HEAD" ? null : req.body,
+      signal: req.signal,
+      redirect: "manual",
+    });
+  } catch (error) {
+    return gatewayErrorResponse(error);
+  }
 
   return buildClientResponse(upstreamResponse);
 }
@@ -123,13 +198,30 @@ async function proxyMessagesRequest(req: Request, options: Required<GatewayOptio
   const startedAt = Date.now();
   const rawRequestBody = await req.text();
 
-  const upstreamResponse = await fetch(buildUpstreamUrl(req.url, options.upstream), {
-    method: req.method,
-    headers: buildUpstreamHeaders(req.headers, options.upstream),
-    body: rawRequestBody,
-    signal: req.signal,
-    redirect: "manual",
-  });
+  let upstreamResponse: Response;
+
+  try {
+    upstreamResponse = await fetch(buildUpstreamUrl(req.url, options.upstream), {
+      method: req.method,
+      headers: buildUpstreamHeaders(req.headers, options.upstream),
+      body: rawRequestBody,
+      signal: req.signal,
+      redirect: "manual",
+    });
+  } catch (error) {
+    const normalizedError = error instanceof Error ? error : new Error("unknown upstream error");
+
+    void logMessagesGatewayError({
+      dataDir: options.dataDir,
+      dbPath: options.dbPath,
+      requestId,
+      startedAt,
+      rawRequestBody,
+      error: normalizedError,
+    }).catch((logError) => console.warn(`[gateway] request log failed: ${logError}`));
+
+    return gatewayErrorResponse(normalizedError);
+  }
 
   if (!upstreamResponse.body) {
     void logMessagesRequest({
@@ -177,7 +269,7 @@ export function createGatewayApp(options: GatewayOptions): Hono {
   app.get("/internal/healthz", (c) => {
     return c.json({
       status: "ok",
-      mode: process.env.MODEL_ROUTING_DISABLED === "1" ? "passthrough" : resolvedOptions.mode,
+      mode: resolveGatewayMode(resolvedOptions.mode),
     });
   });
 

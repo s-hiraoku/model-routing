@@ -46,3 +46,10 @@ export function uuidv7(): string {
 export function sha256Hex(value: string): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
 }
+
+export function resolveGatewayMode(
+  requestedMode: GatewayMode,
+  env: Record<string, string | undefined> = Bun.env,
+): GatewayMode {
+  return env.MODEL_ROUTING_DISABLED === "1" ? "passthrough" : requestedMode;
+}

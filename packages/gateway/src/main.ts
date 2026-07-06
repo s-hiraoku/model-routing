@@ -20,14 +20,13 @@ function envNumber(name: string, fallback: number): number {
 const port = envNumber("PORT", DEFAULT_PORT);
 const upstream = Bun.env.UPSTREAM ?? DEFAULT_UPSTREAM;
 const requestedMode = Bun.env.MODEL_ROUTING_MODE === "shifting" ? "shifting" : "passthrough";
-const mode = Bun.env.MODEL_ROUTING_DISABLED === "1" ? "passthrough" : requestedMode;
 
 Bun.serve({
   hostname: "127.0.0.1",
   port,
-  fetch: createGatewayApp({ upstream, mode }).fetch,
+  fetch: createGatewayApp({ upstream, mode: requestedMode }).fetch,
 });
 
 console.info(`[gateway] listening on http://127.0.0.1:${port}`);
 console.info(`[gateway] upstream: ${upstream}`);
-console.info(`[gateway] mode: ${mode}`);
+console.info(`[gateway] requested mode: ${requestedMode}`);
