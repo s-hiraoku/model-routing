@@ -41,3 +41,25 @@ Notes:
 - It binds only to `127.0.0.1`, preserves request headers except for upstream `host` and recalculated body length, and rewrites only the top-level `model` field for `POST /v1/messages`.
 - A first run exposed a proxy false-negative risk: Bun returned a decoded response body while preserving compression headers, causing Claude Code `Decompression error: ZlibError`. The spike proxy now removes `content-encoding`, `content-length`, and `transfer-encoding` from client responses.
 - The proxy now logs `/v1/messages` response model values from JSON or SSE `message_start` events without logging response bodies.
+
+## 2026-07-06: M0 code completion
+
+Status: code complete, operational gate pending
+
+Implemented:
+
+- Passthrough gateway on `127.0.0.1`, with `/internal/healthz`, `/internal/stats`, and `/internal/task-event`.
+- `/v1/messages` metadata logging, SSE message reconstruction, zstd body storage, safe header allowlist, upstream error handling, `client_abort`, and 429 `quota_events`.
+- SQLite initialization with WAL/busy timeout, M0 datastore tables, `db-init`, `prune`, and `log-explorer`.
+- `hooks/notify-task.ts` for Claude Code `UserPromptSubmit` task boundary events.
+
+Verification:
+
+- `bun test` passed with 41 tests.
+- `bun run lint` passed.
+- `ANTHROPIC_BASE_URL=http://127.0.0.1:18486 claude -p "1+1は? 一言で答えて。"` completed through the gateway.
+- Manual `hooks/notify-task.ts` invocation recorded `task_events` with `git_head`, `git_dirty=0`, and heuristic category `docs`.
+
+Remaining M0 gate:
+
+- Run daily development through the gateway for 1 week and confirm error rate excluding `client_abort`, perceived latency, `task_events` git state, and `/internal/stats` cache/token aggregates.
