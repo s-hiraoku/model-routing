@@ -238,6 +238,7 @@ error_rate
 ```bash
 bun run evals -- run --batch 2026-W28 --stage all --yes
 bun run evals -- run --batch 2026-W28 --stage classify --llm
+bun run evals -- run --batch 2026-W28 --stage replay --gateway=http://localhost:8484
 bun run evals -- run --batch 2026-W28 --stage judge   # 特定 stage のみ
 bun run evals -- audit-classify --n 50
 bun run evals -- estimate --batch 2026-W28            # 枠見積もりのみ
@@ -247,3 +248,5 @@ bun run review-ui
 ```
 
 M1 時点では `classify` はデフォルトでヒューリスティックのみ実行する。`--llm` を付けると unknown / confidence < 0.8 の task_events を Claude Agent SDK(low tier、ツール無効)へ送る。`sample` は `--yes` なしでは dry run として枠見積もりだけを表示する。
+
+M2 の `replay` は `eval_tasks` ごとに configured variant の `replay_runs` を作成し、既存 run はスキップする。実行成果物は `data/runs/{replay_run_id}/` に保存する。`mid+demote` は mid tier モデルで実行し、gateway 側の variant seam が有効になった段階で本番と同じ変速コードパスへ接続する。

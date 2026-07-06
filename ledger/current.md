@@ -30,7 +30,7 @@ Success criteria:
 - [x] Run verification, commit, and push
 - [x] Add M2 datastore schema/repositories for replay/judge/review tables
 - [x] Add `packages/shifter` decision engine with tests
-- [ ] Add eval replay skeleton and worktree lifecycle helpers
+- [x] Add eval replay skeleton and worktree lifecycle helpers
 - [ ] Add judge skeleton and pairwise prompt
 - [ ] Add minimal review-ui queue/comparison pages
 - [ ] Integrate gateway variant seam without enabling production shifting
@@ -45,3 +45,4 @@ Success criteria:
 - 2026-07-06: Verification passed: `bun test` (55 pass), `bun run lint`, `bun run evals -- report` and `estimate` against an empty temp DB, and `bun run smoke -- --gateway=http://127.0.0.1:18489` through a temporary gateway.
 - 2026-07-06: M1 implementation slice committed and pushed as `3e90589`. M2 started with datastore replay/judge/review tables and shifter pure logic.
 - 2026-07-06: Added M2 replay_runs/judgments/human_reviews schema and repositories, plus `packages/shifter` pure decision logic for tier normalization, agent_step demotion, task promote/demote, sticky hold, and overrides. Verification passed: `bun test` (61 pass) and `bun run lint`.
+- 2026-07-06: Added replay stage skeleton, variant-to-model mapping, Agent SDK worktree executor seam, artifact writing under `data/runs`, quota event recording, and idempotent skip behavior. Targeted replay tests and empty-DB CLI replay passed.

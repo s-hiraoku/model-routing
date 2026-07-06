@@ -3,6 +3,7 @@ import { defaultDatabasePath, initializeDatabase, listEvalTasksByBatch } from "@
 import { loadEvalConfig, loadModelsConfig } from "@model-routing/shared";
 import { formatAuditTasks, listAuditTasks } from "./audit";
 import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
+import { runReplayStage } from "./replay";
 import { formatM1Report, getM1Report } from "./report";
 import { estimateRuns, sampleTasks } from "./sample";
 import { assertAllowedHour } from "./schedule";
@@ -70,7 +71,7 @@ function flagBoolean(args: ParsedArgs, name: string): boolean {
 function usage(): string {
   return [
     "Usage:",
-    "  bun run evals -- run --batch <id> --stage classify|sample|all [--llm] [--yes]",
+    "  bun run evals -- run --batch <id> --stage classify|sample|replay|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
     "  bun run evals -- audit-classify --n 50",
     "  bun run evals -- report",
@@ -127,6 +128,18 @@ async function commandRun(args: ParsedArgs): Promise<void> {
     console.info(
       `sample: inserted=${result.inserted} existing=${result.alreadyPresent} tasks=${result.estimate.tasks} total_runs=${result.estimate.totalRuns} estimated_windows=${result.estimate.estimatedWindows}`,
     );
+  }
+
+  if (stage === "replay" || stage === "all") {
+    const result = await runReplayStage({
+      dbPath,
+      batchId,
+      config,
+      models,
+      dataDir: flagString(args, "data-dir", Bun.env.DATA_DIR ?? "data"),
+      gatewayBaseUrl: flagString(args, "gateway", ""),
+    });
+    console.info(`replay: tasks=${result.tasks} inserted=${result.insertedRuns} skipped=${result.skippedRuns}`);
   }
 
   if (stage === "all") {

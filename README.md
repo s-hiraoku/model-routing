@@ -99,6 +99,7 @@ bun run evals -- report
 bun run evals -- run --batch 2026-W28 --stage classify
 bun run evals -- run --batch 2026-W28 --stage classify --llm
 bun run evals -- run --batch 2026-W28 --stage sample --yes
+bun run evals -- run --batch 2026-W28 --stage replay --gateway=http://localhost:8484
 bun run evals -- audit-classify --n 50
 bun run smoke -- --gateway=http://localhost:8484
 ```
