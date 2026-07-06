@@ -202,6 +202,8 @@ localhost:8585、Hono JSX SSR + フォーム POST。
 - 提案ページ: フィードバック由来のポリシー変更案の承認/却下([07](07-feedback-and-evolution.md#2-自由記述フィードバックプル型いつでも))
 - 満足度ページ: 月 1 問チェックの回答先
 
+M2 の最小 Review UI は `bun run review-ui` で起動し、`/queue` で未レビュー judgment ペア、`/compare/:evalTaskId/:candidateRunId/:baselineRunId` でブラインド比較、`POST /reviews` で `human_reviews` 保存、`/reveal/...` で variant と judge summary を開示する。キュー取得はレビュー済みペアを除外し、詳細取得は保存直後の reveal のためレビュー済みも参照できる。
+
 ### κ の算出とゲート
 
 human_reviews とジャッジ最終判定で Cohen's κ(win/loss/tie の 3 値)。

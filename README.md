@@ -95,6 +95,7 @@ bun run gateway              # localhost:8484, passthrough + /v1/messages metada
 bun run log-explorer -- recent --limit=20
 bun run log-explorer -- stats
 bun run prune -- --dry-run
+bun run review-ui             # localhost:8585, blind A/B review queue
 bun run evals -- report
 bun run evals -- run --batch 2026-W28 --stage classify
 bun run evals -- run --batch 2026-W28 --stage classify --llm
@@ -108,6 +109,8 @@ bun run smoke -- --gateway=http://localhost:8484
 M0 のコード実装は完了済み。残る M0 ゲートは、実際に `ANTHROPIC_BASE_URL` を gateway に向けた日常運用を 1 週間行い、エラー率・体感遅延・`task_events`・`stats` を確認すること。
 
 M1 の `classify` はデフォルトではヒューリスティックのみで、`--llm` を付けたときだけ低信頼・unknown タスクを Claude Agent SDK で分類する。`sample` は `--yes` なしでは dry run として見積もりだけ表示する。M2 の `replay` は `data/runs/{run_id}/` に成果物を保存し、`judge` は `config/prompts/pairwise-v1.md` で baseline(mid) と各 variant を比較する。
+
+Review UI は `bun run review-ui` で `http://127.0.0.1:8585/queue` に起動する。未レビューの judgment ペアをブラインド表示し、A/B/同等/スキップを `human_reviews` に保存する。
 
 Claude Code の `UserPromptSubmit` hook には、必要に応じて以下を登録する。
 

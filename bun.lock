@@ -45,6 +45,15 @@
         "zod": "^4.4.3",
       },
     },
+    "packages/review-ui": {
+      "name": "@model-routing/review-ui",
+      "version": "0.0.0",
+      "dependencies": {
+        "@model-routing/datastore": "workspace:*",
+        "@model-routing/shared": "workspace:*",
+        "hono": "^4.12.27",
+      },
+    },
     "packages/shared": {
       "name": "@model-routing/shared",
       "version": "0.0.0",
@@ -169,6 +178,8 @@
     "@model-routing/evals": ["@model-routing/evals@workspace:packages/evals"],
 
     "@model-routing/gateway": ["@model-routing/gateway@workspace:packages/gateway"],
+
+    "@model-routing/review-ui": ["@model-routing/review-ui@workspace:packages/review-ui"],
 
     "@model-routing/shared": ["@model-routing/shared@workspace:packages/shared"],
 

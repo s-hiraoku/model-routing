@@ -15,6 +15,7 @@
     "lint": "biome check .",
     "log-explorer": "bun scripts/log-explorer.ts",
     "prune": "bun scripts/prune.ts",
+    "review-ui": "bun packages/review-ui/src/main.tsx",
     "smoke": "bun packages/evals/src/main.ts smoke",
     "spike:rewrite": "bun scripts/spike-rewrite.ts",
     "test": "bun test"

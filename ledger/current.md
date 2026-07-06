@@ -32,7 +32,7 @@ Success criteria:
 - [x] Add `packages/shifter` decision engine with tests
 - [x] Add eval replay skeleton and worktree lifecycle helpers
 - [x] Add judge skeleton and pairwise prompt
-- [ ] Add minimal review-ui queue/comparison pages
+- [x] Add minimal review-ui queue/comparison pages
 - [ ] Integrate gateway variant seam without enabling production shifting
 - [ ] Run verification, commit, and push M2 slice
 
@@ -47,3 +47,4 @@ Success criteria:
 - 2026-07-06: Added M2 replay_runs/judgments/human_reviews schema and repositories, plus `packages/shifter` pure decision logic for tier normalization, agent_step demotion, task promote/demote, sticky hold, and overrides. Verification passed: `bun test` (61 pass) and `bun run lint`.
 - 2026-07-06: Added replay stage skeleton, variant-to-model mapping, Agent SDK worktree executor seam, artifact writing under `data/runs`, quota event recording, and idempotent skip behavior. Targeted replay tests and empty-DB CLI replay passed.
 - 2026-07-06: Added judge stage skeleton with pairwise-v1 prompt, schema-enforced Agent SDK judge output, position swapping, before-context extraction, idempotent judgment insertion, and tests. Review UI and gateway variant seam remain for M2.
+- 2026-07-06: Added minimal Hono JSX Review UI with queue, blind compare, review POST storage, reveal page, keyboard submit script, and datastore review queue repositories/tests. Gateway variant seam remains for M2.

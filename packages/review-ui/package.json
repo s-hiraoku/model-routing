@@ -1,0 +1,14 @@
+{
+  "name": "@model-routing/review-ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/main.tsx"
+  },
+  "dependencies": {
+    "@model-routing/datastore": "workspace:*",
+    "@model-routing/shared": "workspace:*",
+    "hono": "^4.12.27"
+  }
+}
