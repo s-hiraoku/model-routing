@@ -21,7 +21,7 @@ import {
   type Tier,
   uuidv7,
 } from "@model-routing/shared";
-import { decideShift, type ShiftPolicy, withTier } from "@model-routing/shifter";
+import { decideShift, isAgentStep, type SessionShiftState, type ShiftPolicy, withTier } from "@model-routing/shifter";
 import { Hono } from "hono";
 import { z } from "zod";
 import { extractRequestFeatures } from "./features";
@@ -35,6 +35,7 @@ export type GatewayOptions = {
   enableLogging?: boolean;
   models?: ModelsConfig;
   variantPolicies?: Record<string, ShiftPolicy>;
+  shiftPolicyRef?: { current: ShiftPolicy | null };
 };
 
 type ActiveReplay = {
@@ -47,6 +48,7 @@ type PreparedMessagesRequest = {
   upstreamBody: string;
   replayRunId: string | null;
   shiftEvent: Omit<ShiftEventInsert, "requestId" | "createdAt"> | null;
+  shifted: boolean;
 };
 
 function buildUpstreamUrl(requestUrl: string, upstreamBase: string): string {
@@ -397,54 +399,121 @@ function prepareMessagesRequest(args: {
   req: Request;
   rawRequestBody: string;
   models?: ModelsConfig;
+  mode: GatewayMode;
   variantPolicies: Record<string, ShiftPolicy>;
   activeReplay: ActiveReplay | null;
+  shiftPolicy: ShiftPolicy | null;
+  sessionState: SessionShiftState;
 }): PreparedMessagesRequest {
   const replay = resolveReplayVariant(args.req, args.activeReplay);
-  if (!replay || !args.models) {
-    return { upstreamBody: args.rawRequestBody, replayRunId: replay?.runId ?? null, shiftEvent: null };
+  if (!replay) {
+    return prepareProductionShift(args);
+  }
+
+  if (!args.models) {
+    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null, shifted: false };
   }
 
   const policy = args.variantPolicies[replay.variant];
   if (!policy) {
-    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null };
+    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null, shifted: false };
   }
 
-  const features = withTier(extractRequestFeatures(args.rawRequestBody), args.models);
-  const decision = decideShift({
-    features,
-    state: {
+  const prepared = applyPolicyShift({
+    rawRequestBody: args.rawRequestBody,
+    models: args.models,
+    policy,
+    sessionState: {
       taskEventId: null,
       category: null,
       currentGear: null,
       demotedStreak: 0,
       isTaskStart: false,
     },
-    policy,
-    enabled: true,
+    updateSessionState: false,
   });
 
+  return { ...prepared, replayRunId: replay.runId };
+}
+
+function prepareProductionShift(args: {
+  rawRequestBody: string;
+  models?: ModelsConfig;
+  mode: GatewayMode;
+  shiftPolicy: ShiftPolicy | null;
+  sessionState: SessionShiftState;
+}): PreparedMessagesRequest {
+  if (resolveGatewayMode(args.mode) !== "shifting" || !args.models || !args.shiftPolicy) {
+    return { upstreamBody: args.rawRequestBody, replayRunId: null, shiftEvent: null, shifted: false };
+  }
+
+  return {
+    ...applyPolicyShift({
+      rawRequestBody: args.rawRequestBody,
+      models: args.models,
+      policy: args.shiftPolicy,
+      sessionState: args.sessionState,
+      updateSessionState: true,
+    }),
+    replayRunId: null,
+  };
+}
+
+function applyPolicyShift(args: {
+  rawRequestBody: string;
+  models: ModelsConfig;
+  policy: ShiftPolicy;
+  sessionState: SessionShiftState;
+  updateSessionState: boolean;
+}): Omit<PreparedMessagesRequest, "replayRunId"> {
+  const features = withTier(extractRequestFeatures(args.rawRequestBody), args.models);
+  const decision = decideShift({
+    features,
+    state: args.sessionState,
+    policy: args.policy,
+    enabled: true,
+  });
+  updateSessionStateAfterDecision(args.sessionState, features, decision.gear, decision.reason, args.updateSessionState);
+
   if (!features.tierRequested || decision.gear === features.tierRequested) {
-    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null };
+    return { upstreamBody: args.rawRequestBody, shiftEvent: null, shifted: false };
   }
 
   const rewritten = rewriteMessagesBodyForTier(args.rawRequestBody, decision.gear, args.models);
   if (!rewritten) {
-    return { upstreamBody: args.rawRequestBody, replayRunId: replay.runId, shiftEvent: null };
+    return { upstreamBody: args.rawRequestBody, shiftEvent: null, shifted: false };
   }
 
   return {
     upstreamBody: rewritten,
-    replayRunId: replay.runId,
+    shifted: true,
     shiftEvent: {
       policyVersion: decision.policyVersion ?? "none",
-      taskEventId: null,
-      decidedCategory: null,
+      taskEventId: args.sessionState.taskEventId,
+      decidedCategory: args.sessionState.category,
       gearFrom: features.tierRequested,
       gearTo: decision.gear,
       reason: decision.reason,
     },
   };
+}
+
+function updateSessionStateAfterDecision(
+  state: SessionShiftState,
+  features: ReturnType<typeof withTier>,
+  gear: Tier,
+  reason: string,
+  enabled: boolean,
+): void {
+  if (!enabled) {
+    return;
+  }
+
+  state.demotedStreak = isAgentStep(features) ? state.demotedStreak + 1 : 0;
+  if (reason === "promote_task" || reason === "demote_task") {
+    state.currentGear = gear;
+  }
+  state.isTaskStart = false;
 }
 
 async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<Response> {
@@ -473,6 +542,7 @@ async function proxyMessagesRequest(
   req: Request,
   options: Required<GatewayOptions>,
   activeReplay: ActiveReplay | null,
+  sessionState: SessionShiftState,
 ): Promise<Response> {
   const requestId = uuidv7();
   const startedAt = Date.now();
@@ -481,9 +551,13 @@ async function proxyMessagesRequest(
     req,
     rawRequestBody,
     models: options.models,
+    mode: options.mode,
     variantPolicies: options.variantPolicies,
     activeReplay,
+    shiftPolicy: options.shiftPolicyRef.current,
+    sessionState,
   });
+  let effectivePrepared = prepared;
 
   let upstreamResponse: Response;
 
@@ -519,6 +593,34 @@ async function proxyMessagesRequest(
     return gatewayErrorResponse(normalizedError);
   }
 
+  if (prepared.shifted && upstreamResponse.status >= 400 && upstreamResponse.status < 500) {
+    try {
+      upstreamResponse = await fetch(buildUpstreamUrl(req.url, options.upstream), {
+        method: req.method,
+        headers: buildUpstreamHeaders(req.headers, options.upstream),
+        body: rawRequestBody,
+        signal: req.signal,
+        redirect: "manual",
+      });
+      effectivePrepared = {
+        ...prepared,
+        upstreamBody: rawRequestBody,
+        shifted: false,
+        shiftEvent: prepared.shiftEvent
+          ? {
+              ...prepared.shiftEvent,
+              gearFrom: prepared.shiftEvent.gearTo,
+              gearTo: prepared.shiftEvent.gearFrom,
+              reason: "degrade_guard",
+            }
+          : null,
+      };
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error("unknown upstream error");
+      return gatewayErrorResponse(normalizedError);
+    }
+  }
+
   if (!upstreamResponse.body) {
     void logMessagesRequest({
       dataDir: options.dataDir,
@@ -527,8 +629,8 @@ async function proxyMessagesRequest(
       startedAt,
       rawRequestBody,
       requestHeaders: req.headers,
-      replayRunId: prepared.replayRunId,
-      shiftEvent: prepared.shiftEvent,
+      replayRunId: effectivePrepared.replayRunId,
+      shiftEvent: effectivePrepared.shiftEvent,
       responseBody: null,
       upstreamResponse,
     }).catch((error) => console.warn(`[gateway] request log failed: ${error}`));
@@ -545,8 +647,8 @@ async function proxyMessagesRequest(
     startedAt,
     rawRequestBody,
     requestHeaders: req.headers,
-    replayRunId: prepared.replayRunId,
-    shiftEvent: prepared.shiftEvent,
+    replayRunId: effectivePrepared.replayRunId,
+    shiftEvent: effectivePrepared.shiftEvent,
     responseBody: logBody,
     upstreamResponse,
   }).catch((error) => console.warn(`[gateway] request log failed: ${error}`));
@@ -564,8 +666,16 @@ export function createGatewayApp(options: GatewayOptions): Hono {
     models: options.models,
     upstream: options.upstream,
     variantPolicies: options.variantPolicies ?? {},
+    shiftPolicyRef: options.shiftPolicyRef ?? { current: null },
   };
   let activeReplay: ActiveReplay | null = null;
+  const sessionState: SessionShiftState = {
+    taskEventId: null,
+    category: null,
+    currentGear: null,
+    demotedStreak: 0,
+    isTaskStart: false,
+  };
 
   if (resolvedOptions.enableLogging) {
     initializeDatabase(resolvedOptions.dbPath);
@@ -626,6 +736,11 @@ export function createGatewayApp(options: GatewayOptions): Hono {
       categoryConfidence: classification.confidence,
       selfContained: null,
     });
+    sessionState.taskEventId = eventId;
+    sessionState.category = classification.category;
+    sessionState.currentGear = null;
+    sessionState.demotedStreak = 0;
+    sessionState.isTaskStart = true;
 
     return c.json({
       id: eventId,
@@ -675,7 +790,7 @@ export function createGatewayApp(options: GatewayOptions): Hono {
       return proxyToUpstream(c.req.raw, resolvedOptions);
     }
 
-    return proxyMessagesRequest(c.req.raw, resolvedOptions, activeReplay);
+    return proxyMessagesRequest(c.req.raw, resolvedOptions, activeReplay, sessionState);
   });
 
   app.all("*", (c) => proxyToUpstream(c.req.raw, resolvedOptions));

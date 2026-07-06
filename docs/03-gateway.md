@@ -46,6 +46,8 @@ gateway は 127.0.0.1 バインドのみ。`/internal/*` と `X-MR-Variant` は 
 | `shifting`(M4 以降) | shift-policy に従い model 書き換え + ログ記録 |
 | `MODEL_ROUTING_DISABLED=1` | 強制 passthrough(キルスイッチ) |
 
+M4 の `shifting` は `SHIFT_POLICY` で指定された policy を起動時に読み込む。未指定時は `config/shift-policy.yaml` を試すが、ファイルなし・検証失敗なら policy なしとして全リクエスト hold になる。`SIGHUP` で同じ path を再読込する。
+
 ## リクエスト処理フロー
 
 ```
@@ -148,7 +150,7 @@ export interface SessionShiftState {
 ```bash
 bun run gateway    # PORT=8484、127.0.0.1 バインド
 # 環境変数: PORT / MODEL_ROUTING_MODE=passthrough|shifting / MODEL_ROUTING_DISABLED
-#           DATA_DIR(デフォルト ./data)/ UPSTREAM(テスト用モック差し替え)
+#           SHIFT_POLICY / MODELS_CONFIG / DATA_DIR(デフォルト ./data)/ UPSTREAM(テスト用モック差し替え)
 ```
 
 ## M0 完了条件の運用チェック

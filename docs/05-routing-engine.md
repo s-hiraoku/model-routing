@@ -127,6 +127,8 @@ Shifter は gear を決めるだけで、request body の変換は gateway が `
 - ポリシーファイルが Zod 検証失敗 → 旧ポリシー維持、なければ全素通し
 - `overrides.<category>.action: none` は最強(生成ポリシーより優先)
 
+M4 実装では gateway が `MODEL_ROUTING_MODE=shifting` のときだけ production policy を適用する。policy 未読込、未知モデル、never_touch、カテゴリ不明、キルスイッチ時は hold。書き換え後に上流が 4xx を返した場合は元 body で 1 回だけ再試行し、`shift_events.reason='degrade_guard'` として記録する。
+
 ## 主要インターフェース
 
 ```ts

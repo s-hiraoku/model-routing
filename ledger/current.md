@@ -3,16 +3,16 @@
 Goal: Complete the planned model-routing implementation beyond M0, progressing milestone by milestone from M1 through M5 where feasible, with durable ledger updates, tests, docs, commits, and pushes after completed slices.
 Owner: Codex
 Started: 2026-07-06
-Status: M3 in progress
+Status: M4 in progress
 
-## Current Milestone: M3 Aggregate, Report, and Policy Generation
+## Current Milestone: M4 Production Shifting
 
 Success criteria:
 
-- `evals` aggregates judgments by category and variant, using human_reviews as the authoritative override.
-- Wilson confidence intervals, verify pass rate, average turns, token totals, and error rate are reported per category/variant.
-- `shift-policy.yaml` can be generated from thresholds while preserving manual overrides.
-- Markdown batch reports are written under `data/reports/`.
+- Gateway applies production shift-policy only in explicit `MODEL_ROUTING_MODE=shifting`.
+- Missing/invalid policy, unknown tier, never_touch, and kill switch all hold/passthrough.
+- Shifted 4xx responses retry the original body once and record `degrade_guard`.
+- SIGHUP reloads `SHIFT_POLICY` without restarting gateway.
 - Repository verification passes before each pushed slice.
 
 ## Plan
@@ -38,7 +38,12 @@ Success criteria:
 - [x] Add Markdown report and policy generation stage
 - [x] Add policy changelog persistence or generated changelog output
 - [x] Update docs/README for M3 commands
-- [ ] Run verification, commit, and push M3 slice
+- [x] Run verification, commit, and push M3 slice
+- [x] Integrate production shifting mode with loaded policy
+- [x] Add shifted 4xx transparent retry and degrade_guard logging
+- [x] Add SIGHUP policy reload in gateway main
+- [ ] Add rollout/stats polish for cache comparison and operational notes
+- [ ] Run verification, commit, and push M4 slice
 
 ## Notes
 
@@ -55,3 +60,5 @@ Success criteria:
 - 2026-07-06: Added gateway replay variant seam with `/internal/replay-begin` and `/internal/replay-end`, localhost-only `X-MR-Variant` handling, `mid+demote` agent-step demotion through shifter, request replay_run_id logging, and shift_events insertion.
 - 2026-07-06: M2 implementation slices pushed through `f1585cf`. Verification passed: `bun test` (70 pass), `bun run lint`, and empty-DB replay CLI. M2 operational gate remains external: run a real batch, review at least 20 pairs, and check 4-variant completion plus human-judge κ. M3 implementation started.
 - 2026-07-06: Added M3 aggregate stage with Wilson CI, human review overrides, judge-human κ, `tier_profiles` schema/repository, plus report and conservative shift-policy generation from thresholds while preserving overrides.
+- 2026-07-06: M3 implementation slice pushed as `079d88c`. Verification passed: `bun test` (75 pass), `bun run lint`, and empty-DB aggregate/report CLI. M3 operational gate remains external: accumulate real batches and inspect generated policy conclusions.
+- 2026-07-06: Added M4 production shifting integration behind `MODEL_ROUTING_MODE=shifting`, `SHIFT_POLICY` loading with SIGHUP reload, policy-driven model rewrite, and shifted 4xx original-body retry recorded as `degrade_guard`.

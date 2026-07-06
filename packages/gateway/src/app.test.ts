@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ModelsConfig } from "@model-routing/shared";
+import type { ShiftPolicy } from "@model-routing/shifter";
 import { createGatewayApp, createReplayVariantPolicies } from "./app";
 
 const models: ModelsConfig = {
@@ -15,6 +16,22 @@ const models: ModelsConfig = {
   },
   never_touch: ["claude-haiku-*"],
   subscription: { window_hours: 5, eval_runs_per_window: 20 },
+};
+
+const demoteDocsPolicy: ShiftPolicy = {
+  version: "test-policy",
+  demote: {
+    agent_step: { enabled: false, to: "low", min_consecutive: 2 },
+    categories: { docs: { to: "low" } },
+  },
+  promote: { categories: {} },
+  governor: {
+    quota_guard: false,
+    window_burn_threshold: 1,
+    degrade_error_rate: 1,
+    degrade_pause_minutes: 15,
+  },
+  overrides: {},
 };
 
 async function waitFor<T>(read: () => T | null, timeoutMs = 1000): Promise<T> {
@@ -216,6 +233,139 @@ describe("gateway app", () => {
           )
           .get();
         expect(shift).toEqual({ gear_from: "mid", gear_to: "low", reason: "demote_agent_step" });
+      } finally {
+        db.close();
+      }
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("applies production shifting from the loaded policy", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-shifting-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    let upstreamBody: Record<string, unknown> | null = null;
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        upstreamBody = (await req.json()) as Record<string, unknown>;
+        return Response.json({ id: "msg_1", model: upstreamBody.model });
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "shifting",
+        dataDir,
+        dbPath,
+        models,
+        shiftPolicyRef: { current: demoteDocsPolicy },
+      });
+      await app.request("http://127.0.0.1/internal/task-event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session_id: "session-1", cwd: "/repo", prompt: "README を更新して" }),
+      });
+
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          output_config: { effort: "high" },
+          messages: [{ role: "user", content: "README を更新して" }],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(upstreamBody?.model).toBe("claude-haiku-4-5-20251001");
+      expect(upstreamBody?.output_config).toEqual({});
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const shift = await waitFor(() =>
+          db
+            .query<{ gear_from: string; gear_to: string; reason: string; decided_category: string }, []>(
+              "SELECT gear_from, gear_to, reason, decided_category FROM shift_events LIMIT 1",
+            )
+            .get(),
+        );
+        expect(shift).toEqual({
+          gear_from: "mid",
+          gear_to: "low",
+          reason: "demote_task",
+          decided_category: "docs",
+        });
+      } finally {
+        db.close();
+      }
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("retries the original model when a shifted request fails with 4xx", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-degrade-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    const seenModels: string[] = [];
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const body = (await req.json()) as { model?: string };
+        seenModels.push(body.model ?? "unknown");
+        if (body.model === "claude-haiku-4-5-20251001") {
+          return Response.json({ error: "bad model" }, { status: 400 });
+        }
+        return Response.json({ id: "msg_1", model: body.model });
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "shifting",
+        dataDir,
+        dbPath,
+        models,
+        shiftPolicyRef: { current: demoteDocsPolicy },
+      });
+      await app.request("http://127.0.0.1/internal/task-event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ session_id: "session-1", cwd: "/repo", prompt: "README を更新して" }),
+      });
+
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          output_config: { effort: "high" },
+          messages: [{ role: "user", content: "README を更新して" }],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(seenModels).toEqual(["claude-haiku-4-5-20251001", "claude-fable-5"]);
+      expect(await response.json()).toEqual({ id: "msg_1", model: "claude-fable-5" });
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const shift = await waitFor(() =>
+          db
+            .query<{ gear_from: string; gear_to: string; reason: string }, []>(
+              "SELECT gear_from, gear_to, reason FROM shift_events LIMIT 1",
+            )
+            .get(),
+        );
+        expect(shift).toEqual({ gear_from: "low", gear_to: "mid", reason: "degrade_guard" });
       } finally {
         db.close();
       }
