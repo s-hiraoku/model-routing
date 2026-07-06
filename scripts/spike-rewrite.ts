@@ -143,9 +143,7 @@ export function findModelInSseText(text: string): string | null {
       if (typeof event.model === "string") {
         return event.model;
       }
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   return null;
