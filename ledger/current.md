@@ -3,7 +3,7 @@
 Goal: Complete M0 implementation for model-routing as far as feasible in code: finish gateway passthrough logging, SSE reconstruction/streaming tests, task hooks, stats, quota/error handling, prune/log explorer scripts, docs, verification, commits, and clearly record any operational M0 gates that cannot be completed in-session.
 Owner: Codex
 Started: 2026-07-06
-Status: active
+Status: code-complete; operational gate pending
 
 ## Plan
 
@@ -16,7 +16,7 @@ Status: active
 - [x] 429 quota_events recording
 - [x] `scripts/prune.ts` and `scripts/log-explorer.ts`
 - [x] Repository verification and commits
-- [ ] Operational gate notes for `ANTHROPIC_BASE_URL` and one-week run
+- [x] Operational gate notes for `ANTHROPIC_BASE_URL` and one-week run
 
 ## Notes
 
