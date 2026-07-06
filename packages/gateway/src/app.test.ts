@@ -21,6 +21,15 @@ async function waitFor<T>(read: () => T | null, timeoutMs = 1000): Promise<T> {
   throw new Error("timed out waiting for value");
 }
 
+async function readZstdJson(path: string): Promise<unknown> {
+  const proc = Bun.spawn(["zstd", "-q", "-d", "-c", path], {
+    stdout: "pipe",
+  });
+  const output = await new Response(proc.stdout).text();
+  expect(await proc.exited).toBe(0);
+  return JSON.parse(output) as unknown;
+}
+
 describe("gateway app", () => {
   test("reports health in passthrough mode", async () => {
     const app = createGatewayApp({ upstream: "http://127.0.0.1:9", mode: "passthrough", enableLogging: false });
@@ -184,6 +193,137 @@ describe("gateway app", () => {
       expect(statsResponse.status).toBe(200);
       expect(stats.requests.total).toBe(1);
       expect(stats.requests.byStatus.ok).toBe(1);
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("streams SSE responses to the client and logs a reconstructed message", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-sse-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    const sseBody = [
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-fable-5","content":[],"usage":{"input_tokens":10,"cache_read_input_tokens":3}}}',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}',
+      'event: message_stop\ndata: {"type":"message_stop"}',
+      "",
+    ].join("\n\n");
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        return new Response(sseBody, {
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+      });
+
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          stream: true,
+          messages: [{ role: "user", content: "hello" }],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(sseBody);
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const row = await waitFor(() =>
+          db
+            .query<
+              {
+                model_served: string;
+                stop_reason: string;
+                input_tokens: number;
+                output_tokens: number;
+                cache_read_tokens: number;
+                body_path: string;
+              },
+              []
+            >(
+              "SELECT model_served, stop_reason, input_tokens, output_tokens, cache_read_tokens, body_path FROM requests LIMIT 1",
+            )
+            .get(),
+        );
+
+        expect(row.model_served).toBe("claude-fable-5");
+        expect(row.stop_reason).toBe("end_turn");
+        expect(row.input_tokens).toBe(10);
+        expect(row.output_tokens).toBe(1);
+        expect(row.cache_read_tokens).toBe(3);
+
+        const stored = (await readZstdJson(row.body_path)) as {
+          response?: { content?: Array<{ text?: string }> };
+        };
+        expect(stored.response?.content?.[0]?.text).toBe("ok");
+      } finally {
+        db.close();
+      }
+    } finally {
+      upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("records quota events for 429 responses", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-429-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        return Response.json({ error: "rate limit" }, { status: 429 });
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+      });
+
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+      });
+
+      expect(response.status).toBe(429);
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const quota = await waitFor(() =>
+          db.query<{ kind: string; ref_id: string }, []>("SELECT kind, ref_id FROM quota_events LIMIT 1").get(),
+        );
+        const request = db.query<{ id: string; status: string }, []>("SELECT id, status FROM requests LIMIT 1").get();
+
+        expect(request?.status).toBe("rate_limited");
+        expect(quota).toEqual({ kind: "rate_limited", ref_id: request?.id });
+      } finally {
+        db.close();
+      }
     } finally {
       upstream.stop(true);
       await rm(dir, { recursive: true, force: true });

@@ -3,6 +3,7 @@ import {
   defaultDatabasePath,
   getGatewayStats,
   initializeDatabase,
+  insertQuotaEvent,
   insertRequestLog,
   insertTaskEvent,
   upsertSession,
@@ -19,6 +20,7 @@ import {
 import { Hono } from "hono";
 import { z } from "zod";
 import { extractRequestFeatures } from "./features";
+import { metadataFromJsonResponse, reconstructMessageFromSse } from "./sse";
 
 export type GatewayOptions = {
   upstream: string;
@@ -83,6 +85,28 @@ function requestStatus(httpStatus: number): string {
   return "ok";
 }
 
+function parseResponseForLog(
+  contentType: string | null,
+  responseText: string,
+): {
+  payload: unknown;
+  metadata: ReturnType<typeof metadataFromJsonResponse>;
+} {
+  if (contentType?.includes("text/event-stream")) {
+    const reconstructed = reconstructMessageFromSse(responseText);
+    return {
+      payload: reconstructed.message ?? responseText,
+      metadata: reconstructed.metadata,
+    };
+  }
+
+  const payload = parseJsonOrRaw(responseText);
+  return {
+    payload,
+    metadata: metadataFromJsonResponse(payload),
+  };
+}
+
 async function readStreamText(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (!stream) {
     return "";
@@ -102,12 +126,15 @@ async function logMessagesRequest(args: {
 }): Promise<void> {
   const features = extractRequestFeatures(args.rawRequestBody);
   const responseText = await readStreamText(args.responseBody);
+  const response = parseResponseForLog(args.upstreamResponse.headers.get("content-type"), responseText);
   const bodyPath = bodyPathForRequest(args.dataDir, args.requestId, new Date(args.startedAt));
 
   await writeZstdJson(bodyPath, {
     request: parseJsonOrRaw(args.rawRequestBody),
-    response: parseJsonOrRaw(responseText),
+    response: response.payload,
   });
+
+  const status = requestStatus(args.upstreamResponse.status);
 
   insertRequestLog(args.dbPath, {
     id: args.requestId,
@@ -115,7 +142,7 @@ async function logMessagesRequest(args: {
     replayRunId: null,
     createdAt: args.startedAt,
     modelRequested: features.modelRequested,
-    modelServed: features.modelRequested,
+    modelServed: response.metadata.model ?? features.modelRequested,
     isStreaming: features.isStreaming,
     messageCount: features.messageCount,
     toolCount: features.toolCount,
@@ -123,18 +150,27 @@ async function logMessagesRequest(args: {
     hasImages: features.hasImages,
     systemHash: features.systemHash,
     promptHash: features.promptHash,
-    inputTokens: null,
-    outputTokens: null,
-    cacheReadTokens: null,
-    cacheWriteTokens: null,
-    status: requestStatus(args.upstreamResponse.status),
+    inputTokens: response.metadata.inputTokens,
+    outputTokens: response.metadata.outputTokens,
+    cacheReadTokens: response.metadata.cacheReadTokens,
+    cacheWriteTokens: response.metadata.cacheWriteTokens,
+    status,
     httpStatus: args.upstreamResponse.status,
-    stopReason: null,
+    stopReason: response.metadata.stopReason,
     latencyMs: Date.now() - args.startedAt,
     ttftMs: null,
     errorMessage: null,
     bodyPath,
   });
+
+  if (status === "rate_limited") {
+    insertQuotaEvent(args.dbPath, {
+      id: uuidv7(),
+      createdAt: Date.now(),
+      kind: "rate_limited",
+      refId: args.requestId,
+    });
+  }
 }
 
 async function logMessagesGatewayError(args: {
