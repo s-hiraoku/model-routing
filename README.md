@@ -117,7 +117,7 @@ M0 のコード実装は完了済み。残る M0 ゲートは、実際に `ANTHR
 
 M1 の `classify` はデフォルトではヒューリスティックのみで、`--llm` を付けたときだけ低信頼・unknown タスクを Claude Agent SDK で分類する。`sample` は `--yes` なしでは dry run として見積もりだけ表示する。M2 の `replay` は `data/runs/{run_id}/` に成果物を保存し、`judge` は `config/prompts/pairwise-v1.md` で baseline(mid) と各 variant を比較する。
 
-Review UI は `bun run review-ui` で `http://127.0.0.1:8585/queue` に起動する。未レビューの judgment ペアをブラインド表示し、A/B/同等/スキップを `human_reviews` に保存する。
+Review UI は `bun run review-ui` で `http://127.0.0.1:8585/queue` に起動する。未レビューの judgment ペアをブラインド表示し、A/B/同等/スキップを `human_reviews` に保存する。M5 の push preference は `http://127.0.0.1:8585/push` から開け、回答は `human_reviews(source='push')` として `preference_queue` に紐づく。
 
 評価 replay で gateway を使う場合、replayer は `/internal/replay-begin` / `/internal/replay-end` で active variant を通知する。`mid+demote` は passthrough モードのままでも replay 中の agent step だけ low tier へ書き換え、`requests.replay_run_id` と `shift_events` に記録する。
 

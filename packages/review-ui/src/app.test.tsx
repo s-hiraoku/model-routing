@@ -7,8 +7,10 @@ import {
   initializeDatabase,
   insertEvalTask,
   insertJudgment,
+  insertPreferenceQueueItem,
   insertReplayRun,
   insertTaskEvent,
+  listPreferenceQueue,
   upsertSession,
 } from "@model-routing/datastore";
 import { createReviewUiApp } from "./app";
@@ -92,6 +94,17 @@ describe("review-ui app", () => {
         scoresJson: "{}",
         rationale: "candidate",
       });
+      insertPreferenceQueueItem(dbPath, {
+        id: "preference-1",
+        batchId: "2026-W28",
+        evalTaskId: "0197d239-7c00-7000-8000-000000000101",
+        candidateRunId,
+        baselineRunId,
+        createdAt: 6,
+        priority: 2,
+        reason: "judge_conflict",
+        dueAt: 100,
+      });
 
       const app = createReviewUiApp({ dbPath });
       const queue = await app.request("/queue");
@@ -110,10 +123,21 @@ describe("review-ui app", () => {
       expect(compareText).not.toContain(">low<");
       expect(compareText).not.toContain(">mid<");
 
+      const push = await app.request("/push");
+      const pushText = await push.text();
+      expect(push.status).toBe(200);
+      expect(pushText).toContain("judge_conflict");
+
+      const pushCompare = await app.request("/push/preference-1");
+      const pushCompareText = await pushCompare.text();
+      expect(pushCompare.status).toBe(200);
+      expect(pushCompareText).toContain('name="preference_queue_id"');
+
       const form = new FormData();
       form.set("eval_task_id", "0197d239-7c00-7000-8000-000000000101");
       form.set("candidate_run_id", candidateRunId);
       form.set("baseline_run_id", baselineRunId);
+      form.set("preference_queue_id", "preference-1");
       form.set("started_at", String(Date.now() - 3000));
       form.set("verdict", "A");
       const posted = await app.request("/reviews", { method: "POST", body: form });
@@ -121,12 +145,16 @@ describe("review-ui app", () => {
 
       const db = new Database(dbPath, { readonly: true });
       try {
-        expect(db.query<{ verdict: string }, []>("SELECT verdict FROM human_reviews").get()?.verdict).toBe(
-          "candidate_win",
-        );
+        const review = db
+          .query<{ verdict: string; source: string }, []>("SELECT verdict, source FROM human_reviews")
+          .get();
+        expect(review).toEqual({ verdict: "candidate_win", source: "push" });
       } finally {
         db.close();
       }
+      expect(listPreferenceQueue(dbPath, { status: "answered" })).toMatchObject([
+        { id: "preference-1", humanReviewId: expect.any(String) },
+      ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -3,7 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initializeDatabase } from "./init";
-import { countPreferenceQueueItemsSince, insertPreferenceQueueItem, listPreferenceQueue } from "./preference-queue";
+import {
+  countPreferenceQueueItemsSince,
+  getPreferenceQueueItem,
+  insertPreferenceQueueItem,
+  listPreferenceQueue,
+  markPreferenceQueueAnswered,
+} from "./preference-queue";
 
 describe("preference queue repository", () => {
   test("inserts unique pairs and counts active weekly items", async () => {
@@ -39,6 +45,17 @@ describe("preference queue repository", () => {
 
       expect(listPreferenceQueue(dbPath, { status: "pending" }).map((item) => item.id)).toEqual(["pref-1", "pref-2"]);
       expect(countPreferenceQueueItemsSince(dbPath, { since: 75, statuses: ["pending", "notified"] })).toBe(1);
+      expect(markPreferenceQueueAnswered(dbPath, { id: "pref-1", humanReviewId: "review-1", answeredAt: 300 })).toBe(
+        true,
+      );
+      expect(getPreferenceQueueItem(dbPath, "pref-1")).toMatchObject({
+        status: "answered",
+        answeredAt: 300,
+        humanReviewId: "review-1",
+      });
+      expect(markPreferenceQueueAnswered(dbPath, { id: "pref-1", humanReviewId: "review-2", answeredAt: 400 })).toBe(
+        false,
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -18,8 +18,10 @@ export {
 export { defaultDatabasePath, initializeDatabase } from "./init";
 export {
   countPreferenceQueueItemsSince,
+  getPreferenceQueueItem,
   insertPreferenceQueueItem,
   listPreferenceQueue,
+  markPreferenceQueueAnswered,
   type PreferenceQueueInsert,
   type PreferenceQueueRow,
   type PreferenceQueueStatus,

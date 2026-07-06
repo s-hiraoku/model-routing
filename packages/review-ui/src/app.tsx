@@ -1,10 +1,14 @@
 import { readFile } from "node:fs/promises";
 import {
   defaultDatabasePath,
+  getPreferenceQueueItem,
   getReviewQueueItem,
   initializeDatabase,
   insertHumanReview,
+  listPreferenceQueue,
   listReviewQueue,
+  markPreferenceQueueAnswered,
+  type PreferenceQueueRow,
   type ReviewQueueItem,
 } from "@model-routing/datastore";
 import { uuidv7 } from "@model-routing/shared";
@@ -290,6 +294,8 @@ function Layout(props: { title: string; children: unknown }) {
             </div>
             <nav>
               <a href="/queue">Queue</a>
+              {" · "}
+              <a href="/push">Push</a>
             </nav>
           </header>
           <main class="content">{props.children}</main>
@@ -301,6 +307,10 @@ function Layout(props: { title: string; children: unknown }) {
 
 function compareHref(item: ReviewQueueItem): string {
   return `/compare/${encodeURIComponent(item.evalTaskId)}/${encodeURIComponent(item.candidateRunId)}/${encodeURIComponent(item.baselineRunId)}`;
+}
+
+function pushHref(item: PreferenceQueueRow): string {
+  return `/push/${encodeURIComponent(item.id)}`;
 }
 
 function verifyLabel(value: boolean | null): string {
@@ -401,6 +411,38 @@ function QueuePage(props: { items: ReviewQueueItem[] }) {
   );
 }
 
+function PushQueuePage(props: { items: PreferenceQueueRow[] }) {
+  return (
+    <Layout title="Push queue">
+      <section>
+        <h1>Push queue</h1>
+        <p class="meta">{props.items.length} pending preference prompts</p>
+      </section>
+      {props.items.length === 0 ? (
+        <div class="empty">通知対象の比較はありません。</div>
+      ) : (
+        <section class="queue" aria-label="Pending preference prompts">
+          {props.items.map((item) => (
+            <article class="queue-item">
+              <div>
+                <p class="queue-title">{item.reason}</p>
+                <div class="chips">
+                  <span class="chip">{item.batchId}</span>
+                  <span class="chip">priority {item.priority}</span>
+                  <span class="chip">{item.evalTaskId}</span>
+                </div>
+              </div>
+              <a class="button primary" href={pushHref(item)}>
+                Open
+              </a>
+            </article>
+          ))}
+        </section>
+      )}
+    </Layout>
+  );
+}
+
 function Pane(props: { label: string; diff: string; finalMessage: string; verify: string }) {
   return (
     <section class="pane" aria-label={`Artifact ${props.label}`}>
@@ -422,6 +464,7 @@ function Pane(props: { label: string; diff: string; finalMessage: string; verify
 
 function ComparePage(props: {
   item: ReviewQueueItem;
+  preferenceQueueId?: string;
   candidateDiff: string;
   candidateFinal: string;
   baselineDiff: string;
@@ -437,6 +480,9 @@ function ComparePage(props: {
         <input type="hidden" name="eval_task_id" value={props.item.evalTaskId} />
         <input type="hidden" name="candidate_run_id" value={props.item.candidateRunId} />
         <input type="hidden" name="baseline_run_id" value={props.item.baselineRunId} />
+        {props.preferenceQueueId ? (
+          <input type="hidden" name="preference_queue_id" value={props.preferenceQueueId} />
+        ) : null}
         <input type="hidden" name="started_at" value={Date.now().toString()} />
         <div class="compare-grid">
           <Pane
@@ -519,6 +565,9 @@ export function createReviewUiApp(options: ReviewUiOptions = {}): Hono {
   app.get("/keys.js", (c) => c.text(keysScript, 200, { "content-type": "application/javascript; charset=utf-8" }));
   app.get("/", (c) => c.redirect("/queue"));
   app.get("/queue", (c) => c.html(<QueuePage items={listReviewQueue(dbPath, 100)} />));
+  app.get("/push", (c) =>
+    c.html(<PushQueuePage items={listPreferenceQueue(dbPath, { status: "pending", limit: 100 })} />),
+  );
   app.get("/compare/:evalTaskId/:candidateRunId/:baselineRunId", async (c) => {
     const item = getReviewQueueItem(dbPath, {
       evalTaskId: c.req.param("evalTaskId"),
@@ -539,6 +588,32 @@ export function createReviewUiApp(options: ReviewUiOptions = {}): Hono {
       />,
     );
   });
+  app.get("/push/:preferenceQueueId", async (c) => {
+    const preference = getPreferenceQueueItem(dbPath, c.req.param("preferenceQueueId"));
+    if (preference?.status !== "pending") {
+      return c.notFound();
+    }
+
+    const item = getReviewQueueItem(dbPath, {
+      evalTaskId: preference.evalTaskId,
+      candidateRunId: preference.candidateRunId,
+      baselineRunId: preference.baselineRunId,
+    });
+    if (!item) {
+      return c.notFound();
+    }
+
+    return c.html(
+      <ComparePage
+        item={item}
+        preferenceQueueId={preference.id}
+        candidateDiff={truncate(await readArtifact(item.candidateDiffPath, "[no diff artifact]"), 80_000)}
+        candidateFinal={truncate(await readArtifact(item.candidateFinalMessagePath, "[no final report]"), 16_000)}
+        baselineDiff={truncate(await readArtifact(item.baselineDiffPath, "[no diff artifact]"), 80_000)}
+        baselineFinal={truncate(await readArtifact(item.baselineFinalMessagePath, "[no final report]"), 16_000)}
+      />,
+    );
+  });
   app.post("/reviews", async (c) => {
     const body = await c.req.parseBody();
     const item = getReviewQueueItem(dbPath, {
@@ -552,17 +627,33 @@ export function createReviewUiApp(options: ReviewUiOptions = {}): Hono {
 
     const formVerdict = verdictFromForm(body.verdict);
     const startedAt = startedAtFromForm(body.started_at);
+    const preferenceQueueId = typeof body.preference_queue_id === "string" ? body.preference_queue_id : "";
+    const preference = preferenceQueueId ? getPreferenceQueueItem(dbPath, preferenceQueueId) : null;
+    if (
+      preferenceQueueId &&
+      (preference?.evalTaskId !== item.evalTaskId ||
+        preference.candidateRunId !== item.candidateRunId ||
+        preference.baselineRunId !== item.baselineRunId)
+    ) {
+      return c.notFound();
+    }
+
+    const reviewId = uuidv7();
+    const createdAt = Date.now();
     insertHumanReview(dbPath, {
-      id: uuidv7(),
+      id: reviewId,
       evalTaskId: item.evalTaskId,
       candidateRunId: item.candidateRunId,
       baselineRunId: item.baselineRunId,
-      createdAt: Date.now(),
-      source: "review_session",
+      createdAt,
+      source: preference ? "push" : "review_session",
       verdict: formVerdictToStored(formVerdict),
       note: null,
-      reviewSeconds: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
+      reviewSeconds: Math.max(0, Math.round((createdAt - startedAt) / 1000)),
     });
+    if (preference) {
+      markPreferenceQueueAnswered(dbPath, { id: preferenceQueueId, humanReviewId: reviewId, answeredAt: createdAt });
+    }
 
     return c.redirect(
       `/reveal/${encodeURIComponent(item.evalTaskId)}/${encodeURIComponent(item.candidateRunId)}/${encodeURIComponent(item.baselineRunId)}`,

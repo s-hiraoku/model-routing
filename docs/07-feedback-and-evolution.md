@@ -68,7 +68,7 @@ implicit_signals:                     # 暗黙シグナルの閾値(自動ロー
 - **人間の一票はそのペアのジャッジ判定を上書き**する(集計時に judge 判定を破棄して human 判定を採用)。同時に κ の継続計測にも使う
 - 週の予算を使い切ったら、それ以上のレビュー対象は従来どおり review-ui のキューに静かに積まれるだけ(見たい人だけ見る)
 
-現行実装では `bun run evals -- run --batch <id> --stage feedback` が `feedback.yaml` の週次予算を見て、未レビュー pair を `preference_queue` に enqueue する。通知送信、クリック先のクイック比較、期限切れ処理は後続で接続する。
+現行実装では `bun run evals -- run --batch <id> --stage feedback` が `feedback.yaml` の週次予算を見て、未レビュー pair を `preference_queue` に enqueue する。Review UI の `/push` と `/push/:id` は enqueue 済み pair をブラインド比較として開き、回答を `human_reviews(source='push')` に保存して `preference_queue` を `answered` に更新する。通知送信と期限切れ処理は後続で接続する。
 
 ### 2. 自由記述フィードバック(プル型。いつでも)
 

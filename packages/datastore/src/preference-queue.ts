@@ -128,6 +128,45 @@ export function listPreferenceQueue(
   }
 }
 
+export function getPreferenceQueueItem(dbPath: string, id: string): PreferenceQueueRow | null {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const row = db.query<PreferenceQueueDbRow, [string]>("SELECT * FROM preference_queue WHERE id = ?").get(id);
+    return row ? preferenceQueueFromRow(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
+export function markPreferenceQueueAnswered(
+  dbPath: string,
+  args: { id: string; humanReviewId: string; answeredAt: number },
+): boolean {
+  const db = new Database(dbPath);
+  try {
+    db.run("PRAGMA busy_timeout = 5000;");
+    const result = db
+      .query(
+        `
+        UPDATE preference_queue
+        SET status = 'answered',
+            answered_at = $answeredAt,
+            human_review_id = $humanReviewId
+        WHERE id = $id
+          AND status IN ('pending', 'notified')
+        `,
+      )
+      .run({
+        $id: args.id,
+        $answeredAt: args.answeredAt,
+        $humanReviewId: args.humanReviewId,
+      });
+    return result.changes > 0;
+  } finally {
+    db.close();
+  }
+}
+
 export function countPreferenceQueueItemsSince(
   dbPath: string,
   args: { since: number; statuses: PreferenceQueueStatus[] },
