@@ -6,6 +6,7 @@ import {
   initializeDatabase,
   insertEvalTask,
   insertJudgment,
+  insertPreferenceQueueItem,
   insertReplayRun,
   insertTaskEvent,
   listPreferenceQueue,
@@ -109,6 +110,17 @@ describe("feedback stage", () => {
       upsertSession(dbPath, { id: "session-1", cwd: "/repo", gitRemote: null, seenAt: 1 });
       const conflicted = seedPair(dbPath, "conflict", ["candidate_win", "baseline_win"]);
       seedPair(dbPath, "stable", ["candidate_win", "candidate_win"]);
+      insertPreferenceQueueItem(dbPath, {
+        id: "expired-pref",
+        batchId: "2026-W28",
+        evalTaskId: "expired-task",
+        candidateRunId: "expired-candidate",
+        baselineRunId: "expired-baseline",
+        createdAt: Date.UTC(2026, 6, 6),
+        priority: 1,
+        reason: "review_queue",
+        dueAt: Date.UTC(2026, 6, 5),
+      });
 
       const result = runFeedbackStage({
         dbPath,
@@ -117,8 +129,8 @@ describe("feedback stage", () => {
         now: Date.UTC(2026, 6, 6),
       });
 
-      expect(result).toMatchObject({ candidates: 2, inserted: 1, activeThisWeek: 0, budget: 1 });
-      expect(listPreferenceQueue(dbPath)).toMatchObject([
+      expect(result).toMatchObject({ candidates: 2, expired: 1, inserted: 1, activeThisWeek: 0, budget: 1 });
+      expect(listPreferenceQueue(dbPath, { status: "pending" })).toMatchObject([
         {
           evalTaskId: conflicted.taskId,
           candidateRunId: conflicted.candidateId,
@@ -127,6 +139,7 @@ describe("feedback stage", () => {
           status: "pending",
         },
       ]);
+      expect(listPreferenceQueue(dbPath, { status: "expired" })).toMatchObject([{ id: "expired-pref" }]);
 
       const rerun = runFeedbackStage({
         dbPath,

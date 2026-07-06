@@ -1,5 +1,6 @@
 import {
   countPreferenceQueueItemsSince,
+  expirePreferenceQueueItems,
   insertPreferenceQueueItem,
   listReviewQueue,
   type ReviewQueueItem,
@@ -11,6 +12,7 @@ const weekMs = 7 * 24 * 60 * 60 * 1000;
 export type FeedbackStageResult = {
   candidates: number;
   activeThisWeek: number;
+  expired: number;
   inserted: number;
   budget: number;
 };
@@ -57,6 +59,7 @@ export function runFeedbackStage(args: {
 }): FeedbackStageResult {
   const now = args.now ?? Date.now();
   const budget = args.config.attention_budget.max_push_questions_per_week;
+  const expired = expirePreferenceQueueItems(args.dbPath, now);
   const activeThisWeek = countPreferenceQueueItemsSince(args.dbPath, {
     since: weekStart(now),
     statuses: ["pending", "notified"],
@@ -64,7 +67,7 @@ export function runFeedbackStage(args: {
   const available = Math.max(0, budget - activeThisWeek);
 
   if (available === 0) {
-    return { candidates: 0, activeThisWeek, inserted: 0, budget };
+    return { candidates: 0, activeThisWeek, expired, inserted: 0, budget };
   }
 
   const candidates = listReviewQueue(args.dbPath, Math.max(available * 4, available));
@@ -92,5 +95,5 @@ export function runFeedbackStage(args: {
     }
   }
 
-  return { candidates: candidates.length, activeThisWeek, inserted, budget };
+  return { candidates: candidates.length, activeThisWeek, expired, inserted, budget };
 }

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { initializeDatabase } from "./init";
 import {
   countPreferenceQueueItemsSince,
+  expirePreferenceQueueItems,
   getPreferenceQueueItem,
   insertPreferenceQueueItem,
   listPreferenceQueue,
@@ -56,6 +57,8 @@ describe("preference queue repository", () => {
       expect(markPreferenceQueueAnswered(dbPath, { id: "pref-1", humanReviewId: "review-2", answeredAt: 400 })).toBe(
         false,
       );
+      expect(expirePreferenceQueueItems(dbPath, 250)).toBe(1);
+      expect(getPreferenceQueueItem(dbPath, "pref-2")).toMatchObject({ status: "expired" });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

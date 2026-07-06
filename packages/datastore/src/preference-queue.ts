@@ -167,6 +167,27 @@ export function markPreferenceQueueAnswered(
   }
 }
 
+export function expirePreferenceQueueItems(dbPath: string, now: number): number {
+  const db = new Database(dbPath);
+  try {
+    db.run("PRAGMA busy_timeout = 5000;");
+    const result = db
+      .query(
+        `
+        UPDATE preference_queue
+        SET status = 'expired'
+        WHERE due_at IS NOT NULL
+          AND due_at < $now
+          AND status IN ('pending', 'notified')
+        `,
+      )
+      .run({ $now: now });
+    return result.changes;
+  } finally {
+    db.close();
+  }
+}
+
 export function countPreferenceQueueItemsSince(
   dbPath: string,
   args: { since: number; statuses: PreferenceQueueStatus[] },

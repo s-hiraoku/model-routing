@@ -50,6 +50,7 @@ Success criteria:
 - [x] Add feedback CLI add/list
 - [x] Add `preference_queue` schema and feedback stage enqueue
 - [x] Add Review UI push queue and answered preference tracking
+- [x] Expire stale preference queue items during feedback stage
 - [ ] Run verification, commit, and push M5 slice
 
 ## Notes
@@ -75,3 +76,4 @@ Success criteria:
 - 2026-07-06: Added `feedback_notes` persistence and `bun run feedback -- add/list` so freeform human feedback can be captured before stage 7 interpretation is wired in.
 - 2026-07-06: Added `preference_queue` persistence and `bun run evals -- run --stage feedback` to enqueue blind A/B preference prompts within the weekly attention budget.
 - 2026-07-06: Added Review UI `/push` flow so preference prompts can be answered as `human_reviews(source='push')` and linked back to `preference_queue`.
+- 2026-07-06: Added preference queue expiration during feedback stage so stale prompts release weekly attention budget.
