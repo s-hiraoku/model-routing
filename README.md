@@ -94,6 +94,25 @@ bun run lint
 bun run gateway              # localhost:8484, passthrough + /v1/messages metadata logging
 ```
 
+Claude Code の `UserPromptSubmit` hook には、必要に応じて以下を登録する。
+
+```jsonc
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun /path/to/model-routing/hooks/notify-task.ts"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## 使い方(M0 完了後)
 
 ```bash
