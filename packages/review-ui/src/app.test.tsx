@@ -6,10 +6,13 @@ import { join } from "node:path";
 import {
   initializeDatabase,
   insertEvalTask,
+  insertFeedbackNote,
+  insertFeedbackProposal,
   insertJudgment,
   insertPreferenceQueueItem,
   insertReplayRun,
   insertTaskEvent,
+  listFeedbackProposals,
   listPreferenceQueue,
   upsertSession,
 } from "@model-routing/datastore";
@@ -105,6 +108,23 @@ describe("review-ui app", () => {
         reason: "judge_conflict",
         dueAt: 100,
       });
+      insertFeedbackNote(dbPath, {
+        id: "feedback-1",
+        createdAt: 7,
+        source: "cli",
+        text: "docs は mid に固定したい",
+        status: "parsed",
+        parsedJson: "{}",
+      });
+      insertFeedbackProposal(dbPath, {
+        id: "proposal-1",
+        feedbackNoteId: "feedback-1",
+        createdAt: 8,
+        kind: "policy_override",
+        title: "Review docs routing preference",
+        summary: "Route docs work toward mid.",
+        proposalJson: JSON.stringify({ action: "add_override_candidate", category: "docs", desired_tier: "mid" }),
+      });
 
       const app = createReviewUiApp({ dbPath });
       const queue = await app.request("/queue");
@@ -132,6 +152,23 @@ describe("review-ui app", () => {
       const pushCompareText = await pushCompare.text();
       expect(pushCompare.status).toBe(200);
       expect(pushCompareText).toContain('name="preference_queue_id"');
+
+      const proposals = await app.request("/proposals");
+      const proposalsText = await proposals.text();
+      expect(proposals.status).toBe(200);
+      expect(proposalsText).toContain("Review docs routing preference");
+
+      const proposal = await app.request("/proposals/proposal-1");
+      const proposalText = await proposal.text();
+      expect(proposal.status).toBe(200);
+      expect(proposalText).toContain("desired_tier");
+      expect(proposalText).toContain("mid");
+
+      const decision = new FormData();
+      decision.set("decision", "accepted");
+      const decided = await app.request("/proposals/proposal-1", { method: "POST", body: decision });
+      expect(decided.status).toBe(303);
+      expect(listFeedbackProposals(dbPath, { status: "accepted" })).toMatchObject([{ id: "proposal-1" }]);
 
       const form = new FormData();
       form.set("eval_task_id", "0197d239-7c00-7000-8000-000000000101");

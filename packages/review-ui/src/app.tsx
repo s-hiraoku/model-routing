@@ -1,10 +1,14 @@
 import { readFile } from "node:fs/promises";
 import {
+  decideFeedbackProposal,
   defaultDatabasePath,
+  type FeedbackProposalRow,
+  getFeedbackProposal,
   getPreferenceQueueItem,
   getReviewQueueItem,
   initializeDatabase,
   insertHumanReview,
+  listFeedbackProposals,
   listPreferenceQueue,
   listReviewQueue,
   markPreferenceQueueAnswered,
@@ -296,6 +300,8 @@ function Layout(props: { title: string; children: unknown }) {
               <a href="/queue">Queue</a>
               {" · "}
               <a href="/push">Push</a>
+              {" · "}
+              <a href="/proposals">Proposals</a>
             </nav>
           </header>
           <main class="content">{props.children}</main>
@@ -311,6 +317,10 @@ function compareHref(item: ReviewQueueItem): string {
 
 function pushHref(item: PreferenceQueueRow): string {
   return `/push/${encodeURIComponent(item.id)}`;
+}
+
+function proposalHref(item: FeedbackProposalRow): string {
+  return `/proposals/${encodeURIComponent(item.id)}`;
 }
 
 function verifyLabel(value: boolean | null): string {
@@ -443,6 +453,83 @@ function PushQueuePage(props: { items: PreferenceQueueRow[] }) {
   );
 }
 
+function ProposalsPage(props: { items: FeedbackProposalRow[] }) {
+  return (
+    <Layout title="Feedback proposals">
+      <section>
+        <h1>Feedback proposals</h1>
+        <p class="meta">{props.items.length} pending</p>
+      </section>
+      {props.items.length === 0 ? (
+        <div class="empty">承認待ちの提案はありません。</div>
+      ) : (
+        <section class="queue" aria-label="Pending feedback proposals">
+          {props.items.map((item) => (
+            <article class="queue-item">
+              <div>
+                <p class="queue-title">{item.title}</p>
+                <div class="chips">
+                  <span class="chip">{item.kind}</span>
+                  <span class="chip">{item.feedbackNoteId}</span>
+                </div>
+              </div>
+              <a class="button primary" href={proposalHref(item)}>
+                Open
+              </a>
+            </article>
+          ))}
+        </section>
+      )}
+    </Layout>
+  );
+}
+
+function prettyJson(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function ProposalPage(props: { item: FeedbackProposalRow }) {
+  return (
+    <Layout title="Feedback proposal">
+      <section class="task">
+        <h1>{props.item.title}</h1>
+        <p>{props.item.summary}</p>
+        <div class="chips">
+          <span class="chip">{props.item.kind}</span>
+          <span class="chip">{props.item.status}</span>
+          <span class="chip">{props.item.feedbackNoteId}</span>
+        </div>
+      </section>
+      <section class="pane" aria-label="Proposal JSON">
+        <h2>
+          <span>Proposal</span>
+        </h2>
+        <div class="pane-section">
+          <pre>{prettyJson(props.item.proposalJson)}</pre>
+        </div>
+      </section>
+      {props.item.status === "pending" ? (
+        <form method="post" action={`/proposals/${encodeURIComponent(props.item.id)}`}>
+          <div class="actions">
+            <button type="submit" name="decision" value="accepted">
+              承認
+            </button>
+            <button type="submit" name="decision" value="rejected">
+              却下
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p class="meta">decided: {props.item.decidedAt ? new Date(props.item.decidedAt).toISOString() : "-"}</p>
+      )}
+    </Layout>
+  );
+}
+
 function Pane(props: { label: string; diff: string; finalMessage: string; verify: string }) {
   return (
     <section class="pane" aria-label={`Artifact ${props.label}`}>
@@ -568,6 +655,35 @@ export function createReviewUiApp(options: ReviewUiOptions = {}): Hono {
   app.get("/push", (c) =>
     c.html(<PushQueuePage items={listPreferenceQueue(dbPath, { status: "pending", limit: 100 })} />),
   );
+  app.get("/proposals", (c) =>
+    c.html(<ProposalsPage items={listFeedbackProposals(dbPath, { status: "pending", limit: 100 })} />),
+  );
+  app.get("/proposals/:proposalId", (c) => {
+    const proposal = getFeedbackProposal(dbPath, c.req.param("proposalId"));
+    if (!proposal) {
+      return c.notFound();
+    }
+
+    return c.html(<ProposalPage item={proposal} />);
+  });
+  app.post("/proposals/:proposalId", async (c) => {
+    const body = await c.req.parseBody();
+    const decision = body.decision;
+    if (decision !== "accepted" && decision !== "rejected") {
+      return c.notFound();
+    }
+
+    const didUpdate = decideFeedbackProposal(dbPath, {
+      id: c.req.param("proposalId"),
+      status: decision,
+      decidedAt: Date.now(),
+    });
+    if (!didUpdate) {
+      return c.notFound();
+    }
+
+    return c.redirect("/proposals", 303);
+  });
   app.get("/compare/:evalTaskId/:candidateRunId/:baselineRunId", async (c) => {
     const item = getReviewQueueItem(dbPath, {
       evalTaskId: c.req.param("evalTaskId"),

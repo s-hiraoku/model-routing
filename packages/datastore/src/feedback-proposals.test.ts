@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { insertFeedbackNote, listFeedbackNotes, markFeedbackNoteParsed } from "./feedback-notes";
-import { decideFeedbackProposal, insertFeedbackProposal, listFeedbackProposals } from "./feedback-proposals";
+import {
+  decideFeedbackProposal,
+  getFeedbackProposal,
+  insertFeedbackProposal,
+  listFeedbackProposals,
+} from "./feedback-proposals";
 import { initializeDatabase } from "./init";
 
 describe("feedback proposals repository", () => {
@@ -59,6 +64,7 @@ describe("feedback proposals repository", () => {
       expect(listFeedbackProposals(dbPath, { status: "accepted" })).toMatchObject([
         { id: "proposal-1", decidedAt: 300 },
       ]);
+      expect(getFeedbackProposal(dbPath, "proposal-1")).toMatchObject({ id: "proposal-1", status: "accepted" });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

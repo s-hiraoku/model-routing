@@ -21,6 +21,7 @@ export {
   type FeedbackProposalInsert,
   type FeedbackProposalRow,
   type FeedbackProposalStatus,
+  getFeedbackProposal,
   insertFeedbackProposal,
   listFeedbackProposals,
 } from "./feedback-proposals";

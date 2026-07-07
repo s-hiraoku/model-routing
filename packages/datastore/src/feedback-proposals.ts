@@ -113,6 +113,16 @@ export function listFeedbackProposals(
   }
 }
 
+export function getFeedbackProposal(dbPath: string, id: string): FeedbackProposalRow | null {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const row = db.query<FeedbackProposalDbRow, [string]>("SELECT * FROM feedback_proposals WHERE id = ?").get(id);
+    return row ? feedbackProposalFromRow(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
 export function decideFeedbackProposal(
   dbPath: string,
   args: {

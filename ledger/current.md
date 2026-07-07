@@ -54,7 +54,8 @@ Success criteria:
 - [x] Expire stale preference queue items during feedback stage
 - [x] Run verification, commit, and push current M5 slices
 - [x] Add feedback proposal persistence and local interpretation stage
-- [ ] Implement feedback proposal approval UI and policy application
+- [x] Add feedback proposal approval UI
+- [ ] Apply accepted feedback proposals to policy and changelog
 - [ ] Implement auto-suspend / rollback changelog loop
 
 ## Notes
@@ -83,3 +84,4 @@ Success criteria:
 - 2026-07-06: Added Review UI `/push` flow so preference prompts can be answered as `human_reviews(source='push')` and linked back to `preference_queue`.
 - 2026-07-06: Added preference queue expiration during feedback stage so stale prompts release weekly attention budget.
 - 2026-07-08: Added `feedback_proposals` persistence and local feedback-note interpretation in `evals --stage feedback`, producing reviewable policy/evaluation follow-up proposals before LLM interpretation is wired in.
+- 2026-07-08: Added Review UI `/proposals` approval flow for accepting or rejecting pending feedback proposals.
