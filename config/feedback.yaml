@@ -8,3 +8,7 @@ notifications:
 
 rollback:
   keep_policy_versions: 10
+
+implicit_signals:
+  correction_rate_jump: 1.5
+  min_n: 20

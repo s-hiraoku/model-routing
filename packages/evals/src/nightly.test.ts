@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,7 +9,7 @@ import {
   insertTaskEvent,
   upsertSession,
 } from "@model-routing/datastore";
-import type { ModelsConfig } from "@model-routing/shared";
+import type { FeedbackConfig, ModelsConfig } from "@model-routing/shared";
 import { getNightlyReport, runNightly } from "./nightly";
 
 const models: ModelsConfig = {
@@ -20,6 +20,24 @@ const models: ModelsConfig = {
   },
   never_touch: ["claude-haiku-*"],
   subscription: { window_hours: 5, eval_runs_per_window: 20 },
+};
+
+const feedbackConfig: FeedbackConfig = {
+  attention_budget: {
+    max_push_questions_per_week: 3,
+    satisfaction_check_days: 30,
+  },
+  notifications: {
+    enabled: false,
+    review_ui_url: "http://127.0.0.1:8585",
+  },
+  rollback: {
+    keep_policy_versions: 10,
+  },
+  implicit_signals: {
+    correction_rate_jump: 1.5,
+    min_n: 1,
+  },
 };
 
 describe("nightly report", () => {
@@ -82,13 +100,40 @@ describe("nightly report", () => {
         reason: "demote_task",
       });
 
-      const report = getNightlyReport({ dbPath, models, now });
+      const report = getNightlyReport({ dbPath, models, feedbackConfig, now });
       expect(report.correctionLikeTasks).toBe(1);
       expect(report.unknownModels).toEqual(["claude-mystery-1"]);
       expect(report.shiftedErrors).toEqual([{ reason: "demote_task", count: 1 }]);
+      expect(report.autoSuspends).toEqual([{ category: "debug", reason: "demote_task", count: 1 }]);
 
-      const written = await runNightly({ dbPath, models, reportDir: join(dir, "reports"), now });
+      const policyPath = join(dir, "shift-policy.yaml");
+      const policyOut = join(dir, "shift-policy-out.yaml");
+      await writeFile(
+        policyPath,
+        [
+          "version: nightly-policy",
+          "demote:",
+          "  agent_step:",
+          "    enabled: false",
+          "  categories: {}",
+          "promote:",
+          "  categories: {}",
+          "overrides: {}",
+          "",
+        ].join("\n"),
+      );
+      const written = await runNightly({
+        dbPath,
+        models,
+        feedbackConfig,
+        reportDir: join(dir, "reports"),
+        policyPath,
+        policyOut,
+        now,
+      });
       expect(await readFile(written.reportPath, "utf8")).toContain("claude-mystery-1");
+      expect(await readFile(policyOut, "utf8")).toContain("auto_rollback:demote_task:errors=1");
+      expect(await readFile(written.autoSuspend?.changelogPath ?? "", "utf8")).toContain('"origin": "auto_rollback"');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

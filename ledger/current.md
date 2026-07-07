@@ -56,7 +56,8 @@ Success criteria:
 - [x] Add feedback proposal persistence and local interpretation stage
 - [x] Add feedback proposal approval UI
 - [x] Apply accepted feedback proposals to policy and changelog
-- [ ] Implement auto-suspend / rollback changelog loop
+- [x] Implement auto-suspend / rollback changelog loop
+- [ ] Implement drift detection and model-generation handoff demo
 
 ## Notes
 
@@ -86,3 +87,4 @@ Success criteria:
 - 2026-07-08: Added `feedback_proposals` persistence and local feedback-note interpretation in `evals --stage feedback`, producing reviewable policy/evaluation follow-up proposals before LLM interpretation is wired in.
 - 2026-07-08: Added Review UI `/proposals` approval flow for accepting or rejecting pending feedback proposals.
 - 2026-07-08: Added `bun run policy -- apply-feedback` and `overrides.action=force` so accepted feedback proposals can update policy overrides and changelog.
+- 2026-07-08: Added `evals -- nightly --policy` auto-suspend path for shifted-error categories, writing `overrides.action=none` and `origin: auto_rollback` changelog when the feedback config threshold is met.

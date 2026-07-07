@@ -120,6 +120,8 @@ feedback_notes(pending)
 3. **新モデル検知**: requests の `model_requested` に models.yaml の match に該当しないパターンが現れたら(Claude Code のアップデートで新世代モデルが来た合図)、`models.yaml` 更新の TODO 通知 + 次バッチに新 tier のベイクオフ variant を自動追加
 4. **ドリフト検知の素材更新**: 日次メトリクスのスナップショット
 
+現行実装では `bun run evals -- nightly` が日次レポートを生成し、`--policy <file>` を渡した場合は shift 後エラーが `implicit_signals.min_n` 以上のカテゴリを `overrides.<category>.action: none` に自動 suspend し、`origin: auto_rollback` の changelog を出力する。
+
 ### 毎週: 評価バッチ + ポリシー再生成
 
 [04](04-evaluation-pipeline.md) の全 stage + stage 7(フィードバック取り込み)。再生成の統治ルール:

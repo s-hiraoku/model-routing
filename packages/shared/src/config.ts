@@ -86,6 +86,12 @@ export const feedbackConfigSchema = z.object({
   rollback: z.object({
     keep_policy_versions: z.number().int().positive(),
   }),
+  implicit_signals: z
+    .object({
+      correction_rate_jump: z.number().positive(),
+      min_n: z.number().int().positive(),
+    })
+    .default({ correction_rate_jump: 1.5, min_n: 20 }),
 });
 
 export type FeedbackConfig = z.infer<typeof feedbackConfigSchema>;

@@ -230,14 +230,23 @@ async function commandReport(args: ParsedArgs): Promise<void> {
 async function commandNightly(args: ParsedArgs): Promise<void> {
   const dbPath = flagString(args, "db", defaultDatabasePath());
   const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
+  const feedbackConfig = await loadFeedbackConfig(flagString(args, "feedback-config", "config/feedback.yaml"));
+  const policyPath = flagString(args, "policy", "");
   initializeDatabase(dbPath);
   const result = await runNightly({
     dbPath,
     models,
+    feedbackConfig,
     reportDir: flagString(args, "report-dir", "data/reports"),
+    policyPath: policyPath || undefined,
+    policyOut: flagString(args, "policy-out", policyPath),
   });
 
-  console.info(`nightly: report=${result.reportPath}`);
+  console.info(
+    `nightly: report=${result.reportPath}${
+      result.autoSuspend ? ` auto_suspend=${result.autoSuspend.changes} policy=${result.autoSuspend.policyPath}` : ""
+    }`,
+  );
 }
 
 async function commandSmoke(args: ParsedArgs): Promise<void> {

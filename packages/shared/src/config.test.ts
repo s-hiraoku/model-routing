@@ -43,5 +43,6 @@ describe("loadFeedbackConfig", () => {
 
     expect(config.attention_budget.max_push_questions_per_week).toBe(3);
     expect(config.notifications.review_ui_url).toBe("http://127.0.0.1:8585");
+    expect(config.implicit_signals.min_n).toBe(20);
   });
 });
