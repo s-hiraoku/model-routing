@@ -5,10 +5,12 @@ import { join } from "node:path";
 import {
   initializeDatabase,
   insertEvalTask,
+  insertFeedbackNote,
   insertJudgment,
   insertPreferenceQueueItem,
   insertReplayRun,
   insertTaskEvent,
+  listFeedbackProposals,
   listPreferenceQueue,
   upsertSession,
 } from "@model-routing/datastore";
@@ -110,6 +112,12 @@ describe("feedback stage", () => {
       upsertSession(dbPath, { id: "session-1", cwd: "/repo", gitRemote: null, seenAt: 1 });
       const conflicted = seedPair(dbPath, "conflict", ["candidate_win", "baseline_win"]);
       seedPair(dbPath, "stable", ["candidate_win", "candidate_win"]);
+      insertFeedbackNote(dbPath, {
+        id: "feedback-1",
+        createdAt: 10,
+        source: "cli",
+        text: "docs の commit message は Sonnet mid に固定してほしい",
+      });
       insertPreferenceQueueItem(dbPath, {
         id: "expired-pref",
         batchId: "2026-W28",
@@ -129,7 +137,22 @@ describe("feedback stage", () => {
         now: Date.UTC(2026, 6, 6),
       });
 
-      expect(result).toMatchObject({ candidates: 2, expired: 1, inserted: 1, activeThisWeek: 0, budget: 1 });
+      expect(result).toMatchObject({
+        candidates: 2,
+        expired: 1,
+        inserted: 1,
+        notesParsed: 1,
+        proposalsInserted: 1,
+        activeThisWeek: 0,
+        budget: 1,
+      });
+      expect(listFeedbackProposals(dbPath, { status: "pending" })).toMatchObject([
+        {
+          feedbackNoteId: "feedback-1",
+          kind: "policy_override",
+          title: "Review docs routing preference",
+        },
+      ]);
       expect(listPreferenceQueue(dbPath, { status: "pending" })).toMatchObject([
         {
           evalTaskId: conflicted.taskId,
@@ -148,6 +171,7 @@ describe("feedback stage", () => {
         now: Date.UTC(2026, 6, 6),
       });
       expect(rerun.inserted).toBe(0);
+      expect(rerun.proposalsInserted).toBe(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

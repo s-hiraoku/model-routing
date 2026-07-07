@@ -113,3 +113,32 @@ export function listFeedbackNotes(
     db.close();
   }
 }
+
+export function markFeedbackNoteParsed(
+  dbPath: string,
+  args: { id: string; parsedJson: string; resolution?: string | null },
+): boolean {
+  const db = new Database(dbPath);
+  try {
+    db.run("PRAGMA busy_timeout = 5000;");
+    const result = db
+      .query(
+        `
+        UPDATE feedback_notes
+        SET status = 'parsed',
+            parsed_json = $parsedJson,
+            resolution = $resolution
+        WHERE id = $id
+          AND status = 'pending'
+        `,
+      )
+      .run({
+        $id: args.id,
+        $parsedJson: args.parsedJson,
+        $resolution: args.resolution ?? null,
+      });
+    return result.changes > 0;
+  } finally {
+    db.close();
+  }
+}

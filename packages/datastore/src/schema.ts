@@ -228,6 +228,28 @@ export const feedbackNotes = sqliteTable("feedback_notes", {
   resolution: text("resolution"),
 });
 
+export const feedbackProposals = sqliteTable(
+  "feedback_proposals",
+  {
+    id: text("id").primaryKey(),
+    feedbackNoteId: text("feedback_note_id")
+      .notNull()
+      .references(() => feedbackNotes.id),
+    createdAt: integer("created_at").notNull(),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    proposalJson: text("proposal_json").notNull(),
+    status: text("status").notNull().default("pending"),
+    decidedAt: integer("decided_at"),
+    decisionNote: text("decision_note"),
+  },
+  (table) => [
+    uniqueIndex("idx_feedback_proposals_note").on(table.feedbackNoteId),
+    index("idx_feedback_proposals_status").on(table.status, table.createdAt),
+  ],
+);
+
 export const quotaEvents = sqliteTable(
   "quota_events",
   {

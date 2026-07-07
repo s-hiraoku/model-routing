@@ -186,7 +186,7 @@ async function commandRun(args: ParsedArgs): Promise<void> {
     const feedbackConfig = await loadFeedbackConfig(flagString(args, "feedback-config", "config/feedback.yaml"));
     const result = runFeedbackStage({ dbPath, batchId, config: feedbackConfig });
     console.info(
-      `feedback: candidates=${result.candidates} inserted=${result.inserted} expired=${result.expired} active_this_week=${result.activeThisWeek} budget=${result.budget}`,
+      `feedback: candidates=${result.candidates} inserted=${result.inserted} expired=${result.expired} notes_parsed=${result.notesParsed} proposals=${result.proposalsInserted} active_this_week=${result.activeThisWeek} budget=${result.budget}`,
     );
   }
 

@@ -29,6 +29,7 @@ describe("initializeDatabase", () => {
         expect(tables).toEqual([
           "eval_tasks",
           "feedback_notes",
+          "feedback_proposals",
           "human_reviews",
           "judgments",
           "preference_queue",
@@ -41,6 +42,7 @@ describe("initializeDatabase", () => {
           "tier_profiles",
         ]);
         expect(indexes).toContain("idx_requests_created");
+        expect(indexes).toContain("idx_feedback_proposals_status");
         expect(indexes).toContain("idx_task_events_created");
         expect(indexes).toContain("idx_preference_queue_status");
         expect(db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()?.journal_mode).toBe("wal");
@@ -63,7 +65,7 @@ describe("initializeDatabase", () => {
       const db = new Database(dbPath, { readonly: true });
       try {
         expect(db.query<{ count: number }, []>("SELECT count(*) AS count FROM __drizzle_migrations").get()?.count).toBe(
-          7,
+          8,
         );
       } finally {
         db.close();

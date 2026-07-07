@@ -14,7 +14,16 @@ export {
   type FeedbackNoteStatus,
   insertFeedbackNote,
   listFeedbackNotes,
+  markFeedbackNoteParsed,
 } from "./feedback-notes";
+export {
+  decideFeedbackProposal,
+  type FeedbackProposalInsert,
+  type FeedbackProposalRow,
+  type FeedbackProposalStatus,
+  insertFeedbackProposal,
+  listFeedbackProposals,
+} from "./feedback-proposals";
 export { defaultDatabasePath, initializeDatabase } from "./init";
 export {
   countPreferenceQueueItemsSince,

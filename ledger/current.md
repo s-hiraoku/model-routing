@@ -53,7 +53,8 @@ Success criteria:
 - [x] Add Review UI push queue and answered preference tracking
 - [x] Expire stale preference queue items during feedback stage
 - [x] Run verification, commit, and push current M5 slices
-- [ ] Implement feedback interpretation and proposal approval loop
+- [x] Add feedback proposal persistence and local interpretation stage
+- [ ] Implement feedback proposal approval UI and policy application
 - [ ] Implement auto-suspend / rollback changelog loop
 
 ## Notes
@@ -81,3 +82,4 @@ Success criteria:
 - 2026-07-06: Added `preference_queue` persistence and `bun run evals -- run --stage feedback` to enqueue blind A/B preference prompts within the weekly attention budget.
 - 2026-07-06: Added Review UI `/push` flow so preference prompts can be answered as `human_reviews(source='push')` and linked back to `preference_queue`.
 - 2026-07-06: Added preference queue expiration during feedback stage so stale prompts release weekly attention budget.
+- 2026-07-08: Added `feedback_proposals` persistence and local feedback-note interpretation in `evals --stage feedback`, producing reviewable policy/evaluation follow-up proposals before LLM interpretation is wired in.
