@@ -24,6 +24,7 @@ export {
   getFeedbackProposal,
   insertFeedbackProposal,
   listFeedbackProposals,
+  markFeedbackProposalApplied,
 } from "./feedback-proposals";
 export { defaultDatabasePath, initializeDatabase } from "./init";
 export {

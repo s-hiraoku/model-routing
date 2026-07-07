@@ -7,6 +7,7 @@ export type ShiftReason =
   | "demote_agent_step"
   | "demote_task"
   | "promote_task"
+  | "override_force"
   | "hold"
   | "hold_sticky"
   | "quota_governor"
@@ -56,7 +57,14 @@ export const shiftPolicySchema = z.object({
     })
     .default({ quota_guard: true, window_burn_threshold: 0.7, degrade_error_rate: 0.3, degrade_pause_minutes: 15 }),
   overrides: z
-    .record(z.string(), z.object({ action: z.enum(["none"]).optional(), note: z.string().optional() }))
+    .record(
+      z.string(),
+      z.object({
+        action: z.enum(["none", "force"]).optional(),
+        to: tierSchema.optional(),
+        note: z.string().optional(),
+      }),
+    )
     .default({}),
 });
 
@@ -119,6 +127,12 @@ export function decideShift(args: {
 
   if (state.category && policy.overrides[state.category]?.action === "none") {
     return hold(features);
+  }
+  if (state.category) {
+    const override = policy.overrides[state.category];
+    if (override?.action === "force" && override.to) {
+      return { gear: override.to, reason: "override_force", policyVersion: policy.version };
+    }
   }
 
   if (isAgentStep(features) && policy.demote.agent_step.enabled) {

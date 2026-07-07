@@ -92,7 +92,7 @@ feedback_notes(pending)
   → 人間が承認 → ポリシーに反映(origin: human_feedback)/ 却下 → 記録のみ
 ```
 
-現行実装では `feedback_notes` の保存口として `bun run feedback -- add` / `list` と `skills/model-feedback/SKILL.md` を提供する。`feedback` stage は pending note を local heuristic で `parsed_json` 化し、`feedback_proposals` を生成する。Review UI の `/proposals` で承認/却下できる。LLM 解釈への差し替え、承認後の policy/changelog 反映は後続の stage 7 実装で行う。
+現行実装では `feedback_notes` の保存口として `bun run feedback -- add` / `list` と `skills/model-feedback/SKILL.md` を提供する。`feedback` stage は pending note を local heuristic で `parsed_json` 化し、`feedback_proposals` を生成する。Review UI の `/proposals` で承認/却下できる。`bun run policy -- apply-feedback` は accepted proposal を `overrides.<category>.action: force` と changelog に反映する。LLM 解釈への差し替えは後続の stage 7 実装で行う。
 
 **フィードバックが評価の設計自体を変えることもある**(カテゴリ分割、新しい評価観点)。その場合は「次バッチでこの観点のサンプルを厚くする」という形で評価計画に還流する。
 

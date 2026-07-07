@@ -1,6 +1,12 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { parse } from "yaml";
+import {
+  defaultDatabasePath,
+  initializeDatabase,
+  listFeedbackProposals,
+  markFeedbackProposalApplied,
+} from "@model-routing/datastore";
+import { parse, stringify } from "yaml";
 
 type ParsedArgs = {
   command: string;
@@ -44,7 +50,11 @@ function flagString(args: ParsedArgs, name: string, fallback: string): string {
 }
 
 function usage(): string {
-  return ["Usage:", "  bun run policy -- rollback <policy-file> [--out config/shift-policy.yaml]"].join("\n");
+  return [
+    "Usage:",
+    "  bun run policy -- rollback <policy-file> [--out config/shift-policy.yaml]",
+    "  bun run policy -- apply-feedback [--policy config/shift-policy.yaml] [--out config/shift-policy.yaml] [--db data/model-routing.db]",
+  ].join("\n");
 }
 
 async function commandRollback(args: ParsedArgs): Promise<void> {
@@ -64,12 +74,92 @@ async function commandRollback(args: ParsedArgs): Promise<void> {
   console.info(`rollback: ${parsed.version} -> ${out}`);
 }
 
+function isTier(value: unknown): value is "high" | "mid" | "low" {
+  return value === "high" || value === "mid" || value === "low";
+}
+
+function overrideFromProposal(proposalJson: string): { category: string; tier: "high" | "mid" | "low" } | null {
+  const parsed = JSON.parse(proposalJson) as Record<string, unknown>;
+  if (parsed.action !== "add_override_candidate" || typeof parsed.category !== "string") {
+    return null;
+  }
+  if (!isTier(parsed.desired_tier)) {
+    return null;
+  }
+  return { category: parsed.category, tier: parsed.desired_tier };
+}
+
+async function commandApplyFeedback(args: ParsedArgs): Promise<void> {
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  const policyPath = flagString(args, "policy", "config/shift-policy.yaml");
+  const out = flagString(args, "out", policyPath);
+  const changelogPath = flagString(args, "changelog", "data/reports/feedback-policy-changelog.json");
+  const now = flagString(args, "now", new Date().toISOString());
+  initializeDatabase(dbPath);
+
+  const proposals = listFeedbackProposals(dbPath, { status: "accepted", limit: 100 });
+  const parsedPolicy = parse(await readFile(policyPath, "utf8")) as Record<string, unknown>;
+  const overrides =
+    parsedPolicy.overrides && typeof parsedPolicy.overrides === "object" && !Array.isArray(parsedPolicy.overrides)
+      ? (parsedPolicy.overrides as Record<string, unknown>)
+      : {};
+  const changes: Array<{ proposal_id: string; category: string; to: string }> = [];
+
+  for (const proposal of proposals) {
+    const override = overrideFromProposal(proposal.proposalJson);
+    if (!override) {
+      continue;
+    }
+
+    overrides[override.category] = {
+      action: "force",
+      to: override.tier,
+      note: `human_feedback:${proposal.id}`,
+    };
+    changes.push({ proposal_id: proposal.id, category: override.category, to: override.tier });
+  }
+
+  if (changes.length === 0) {
+    console.info("apply-feedback: applied=0");
+    return;
+  }
+
+  parsedPolicy.overrides = overrides;
+  parsedPolicy.version = `${typeof parsedPolicy.version === "string" ? parsedPolicy.version : "policy"}.feedback-${now.replace(/\D/g, "").slice(0, 14)}`;
+  parsedPolicy.generated_at = now;
+
+  await mkdir(dirname(out), { recursive: true });
+  await mkdir(dirname(changelogPath), { recursive: true });
+  await writeFile(out, stringify(parsedPolicy));
+  await writeFile(
+    changelogPath,
+    `${JSON.stringify(
+      {
+        policy_version: parsedPolicy.version,
+        origin: "human_feedback",
+        applied_at: now,
+        changes,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  for (const change of changes) {
+    markFeedbackProposalApplied(dbPath, { id: change.proposal_id, decidedAt: Date.parse(now) });
+  }
+  console.info(`apply-feedback: applied=${changes.length} policy=${out} changelog=${changelogPath}`);
+}
+
 export async function main(argv = Bun.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
 
   switch (args.command) {
     case "rollback":
       await commandRollback(args);
+      return;
+    case "apply-feedback":
+      await commandApplyFeedback(args);
       return;
     default:
       console.info(usage());

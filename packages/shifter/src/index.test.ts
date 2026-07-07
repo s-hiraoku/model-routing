@@ -126,5 +126,13 @@ describe("decideShift", () => {
         enabled: true,
       }),
     ).toMatchObject({ gear: "mid", reason: "hold" });
+    expect(
+      decideShift({
+        features: baseFeatures,
+        state: { ...baseState, category: "docs", isTaskStart: true },
+        policy: { ...policy, overrides: { docs: { action: "force", to: "high" } } },
+        enabled: true,
+      }),
+    ).toMatchObject({ gear: "high", reason: "override_force" });
   });
 });

@@ -157,3 +157,24 @@ export function decideFeedbackProposal(
     db.close();
   }
 }
+
+export function markFeedbackProposalApplied(dbPath: string, args: { id: string; decidedAt: number }): boolean {
+  const db = new Database(dbPath);
+  try {
+    db.run("PRAGMA busy_timeout = 5000;");
+    const result = db
+      .query(
+        `
+        UPDATE feedback_proposals
+        SET status = 'applied',
+            decided_at = $decidedAt
+        WHERE id = $id
+          AND status = 'accepted'
+        `,
+      )
+      .run({ $id: args.id, $decidedAt: args.decidedAt });
+    return result.changes > 0;
+  } finally {
+    db.close();
+  }
+}

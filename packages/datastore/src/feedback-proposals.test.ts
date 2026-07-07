@@ -8,6 +8,7 @@ import {
   getFeedbackProposal,
   insertFeedbackProposal,
   listFeedbackProposals,
+  markFeedbackProposalApplied,
 } from "./feedback-proposals";
 import { initializeDatabase } from "./init";
 
@@ -65,6 +66,8 @@ describe("feedback proposals repository", () => {
         { id: "proposal-1", decidedAt: 300 },
       ]);
       expect(getFeedbackProposal(dbPath, "proposal-1")).toMatchObject({ id: "proposal-1", status: "accepted" });
+      expect(markFeedbackProposalApplied(dbPath, { id: "proposal-1", decidedAt: 400 })).toBe(true);
+      expect(getFeedbackProposal(dbPath, "proposal-1")).toMatchObject({ id: "proposal-1", status: "applied" });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
