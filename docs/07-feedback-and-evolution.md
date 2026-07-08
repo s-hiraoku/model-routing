@@ -153,6 +153,8 @@ feedback_notes(pending)
 
 **人間がやるのは 1 行の設定変更と、気が向いたときの一言だけ。** これが「自己進化」の具体的な姿。
 
+現行実装では、`models.yaml` の tier model を更新した後に `bun run evals -- model-handoff --batch <new-batch> --from <previous-batch>` を実行すると、更新後 tier、bakeoff variants、枠見積もり、週次再評価から policy 再生成・drift 確認までのコマンド列を Markdown で出力する。
+
 ## 実装マッピング
 
 | 機能 | 実装場所 |

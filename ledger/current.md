@@ -58,7 +58,7 @@ Success criteria:
 - [x] Apply accepted feedback proposals to policy and changelog
 - [x] Implement auto-suspend / rollback changelog loop
 - [x] Implement drift detection
-- [ ] Implement model-generation handoff demo
+- [x] Implement model-generation handoff demo
 
 ## Notes
 
@@ -90,3 +90,4 @@ Success criteria:
 - 2026-07-08: Added `bun run policy -- apply-feedback` and `overrides.action=force` so accepted feedback proposals can update policy overrides and changelog.
 - 2026-07-08: Added `evals -- nightly --policy` auto-suspend path for shifted-error categories, writing `overrides.action=none` and `origin: auto_rollback` changelog when the feedback config threshold is met.
 - 2026-07-08: Added `bun run evals -- drift --from <batch> --to <batch>` to compare tier profile win rates and Wilson intervals across batches.
+- 2026-07-08: Added `bun run evals -- model-handoff --batch <new> --from <previous>` to generate the next-batch command sequence, variant mapping, and capacity estimate after a models.yaml generation update.

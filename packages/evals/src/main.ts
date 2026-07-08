@@ -7,6 +7,7 @@ import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classif
 import { formatDriftReport, getDriftReport } from "./drift";
 import { runFeedbackStage } from "./feedback";
 import { runJudgeStage } from "./judge";
+import { buildModelHandoffPlan, formatModelHandoffPlan } from "./model-handoff";
 import { runNightly } from "./nightly";
 import { runReportStage } from "./policy";
 import { runReplayStage } from "./replay";
@@ -80,6 +81,7 @@ function usage(): string {
     "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|aggregate|report|feedback|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
     "  bun run evals -- drift --from <batch> --to <batch>",
+    "  bun run evals -- model-handoff --batch <id> [--from <previous-batch>]",
     "  bun run evals -- audit-classify --n 50",
     "  bun run evals -- nightly",
     "  bun run evals -- report",
@@ -248,6 +250,32 @@ async function commandDrift(args: ParsedArgs): Promise<void> {
   console.info(formatDriftReport({ fromBatch, toBatch, warnings }));
 }
 
+async function commandModelHandoff(args: ParsedArgs): Promise<void> {
+  const batchId = flagString(args, "batch", "");
+  if (!batchId) {
+    throw new Error("--batch is required");
+  }
+
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  const modelsPath = flagString(args, "models", "config/models.yaml");
+  const configPath = flagString(args, "config", "config/eval.yaml");
+  initializeDatabase(dbPath);
+  const plan = buildModelHandoffPlan({
+    dbPath,
+    batchId,
+    previousBatch: flagString(args, "from", ""),
+    models: await loadModelsConfig(modelsPath),
+    config: await loadEvalConfig(configPath),
+    modelsPath,
+    configPath,
+    feedbackConfigPath: flagString(args, "feedback-config", "config/feedback.yaml"),
+    policyPath: flagString(args, "existing-policy", "config/shift-policy.yaml"),
+    reportDir: flagString(args, "report-dir", "data/reports"),
+    gatewayBaseUrl: flagString(args, "gateway", ""),
+  });
+  console.info(formatModelHandoffPlan(plan));
+}
+
 async function commandNightly(args: ParsedArgs): Promise<void> {
   const dbPath = flagString(args, "db", defaultDatabasePath());
   const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
@@ -299,6 +327,9 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
       return;
     case "drift":
       await commandDrift(args);
+      return;
+    case "model-handoff":
+      await commandModelHandoff(args);
       return;
     case "report":
       await commandReport(args);

@@ -1,7 +1,10 @@
 export {
   type EvalConfig,
   evalConfigSchema,
+  type FeedbackConfig,
+  feedbackConfigSchema,
   loadEvalConfig,
+  loadFeedbackConfig,
   loadModelsConfig,
   type ModelsConfig,
   modelsConfigSchema,
