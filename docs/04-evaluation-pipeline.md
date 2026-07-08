@@ -245,6 +245,7 @@ bun run evals -- run --batch 2026-W28 --stage judge   # 特定 stage のみ
 bun run evals -- run --batch 2026-W28 --stage aggregate
 bun run evals -- run --batch 2026-W28 --stage report --existing-policy config/shift-policy.yaml
 bun run evals -- run --batch 2026-W28 --stage feedback
+bun run evals -- drift --from 2026-W28 --to 2026-W29
 bun run evals -- nightly
 bun run evals -- audit-classify --n 50
 bun run evals -- estimate --batch 2026-W28            # 枠見積もりのみ
@@ -261,4 +262,6 @@ M2 の `judge` は `replay_runs.status = 'ok'` の baseline(mid) と各 non-base
 
 M3 の `aggregate` は position swap の judge 不一致を `tie` とし、同じペアに `human_reviews` がある場合は最新の人間判定を採用して `tier_profiles` を upsert する。`report` は `tier_profiles` から Markdown レポート、policy changelog JSON、shift-policy 候補を生成する。policy 生成は `eval.yaml` の `policy_generation` 閾値と κ を満たすものだけを採用し、`--existing-policy` の `overrides` を保持する。
 
-M5 の `nightly` は既存ログから訂正マーカー、未知モデル、shift 後エラーを集計し、日次 Markdown を `data/reports/` に書き出す。これは自動ロールバック前の監視基盤で、実際の rule suspend は後続ループで changelog と通知に接続する。`feedback` stage は `feedback.yaml` の週次注意予算を見て、未レビューの blind A/B pair を `preference_queue` に冪等 enqueue する。通知送信と回答反映は後続実装で接続する。
+M5 の `nightly` は既存ログから訂正マーカー、未知モデル、shift 後エラーを集計し、日次 Markdown を `data/reports/` に書き出す。`--policy` 指定時は shift 後エラーが閾値以上のカテゴリを `overrides.action: none` に suspend し、auto rollback changelog を出力する。`feedback` stage は `feedback.yaml` の週次注意予算を見て、未レビューの blind A/B pair を `preference_queue` に冪等 enqueue する。push 回答は Review UI の `/push` から `human_reviews(source='push')` に接続済み。
+
+M5 の `drift` は 2 つの batch の `tier_profiles` を比較し、Wilson CI が分離したカテゴリ × variant、または `--min-delta` 以上 win_rate が動いたものを Markdown で表示する。次バッチで評価観点や policy 閾値を見直すための警告であり、単独では policy を変更しない。

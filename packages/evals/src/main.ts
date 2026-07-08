@@ -4,6 +4,7 @@ import { loadEvalConfig, loadFeedbackConfig, loadModelsConfig } from "@model-rou
 import { runAggregateStage } from "./aggregate";
 import { formatAuditTasks, listAuditTasks } from "./audit";
 import { classifyTasks, createAgentSdkClassifier, lowTierModel } from "./classify";
+import { formatDriftReport, getDriftReport } from "./drift";
 import { runFeedbackStage } from "./feedback";
 import { runJudgeStage } from "./judge";
 import { runNightly } from "./nightly";
@@ -78,6 +79,7 @@ function usage(): string {
     "Usage:",
     "  bun run evals -- run --batch <id> --stage classify|sample|replay|judge|aggregate|report|feedback|all [--llm] [--yes]",
     "  bun run evals -- estimate --batch <id>",
+    "  bun run evals -- drift --from <batch> --to <batch>",
     "  bun run evals -- audit-classify --n 50",
     "  bun run evals -- nightly",
     "  bun run evals -- report",
@@ -227,6 +229,25 @@ async function commandReport(args: ParsedArgs): Promise<void> {
   console.info(formatM1Report(getM1Report(dbPath)));
 }
 
+async function commandDrift(args: ParsedArgs): Promise<void> {
+  const fromBatch = flagString(args, "from", "");
+  const toBatch = flagString(args, "to", "");
+  if (!fromBatch || !toBatch) {
+    throw new Error("--from and --to are required");
+  }
+
+  const dbPath = flagString(args, "db", defaultDatabasePath());
+  initializeDatabase(dbPath);
+  const warnings = getDriftReport({
+    dbPath,
+    fromBatch,
+    toBatch,
+    minN: flagNumber(args, "min-n", 10),
+    minAbsDelta: flagNumber(args, "min-delta", 0.15),
+  });
+  console.info(formatDriftReport({ fromBatch, toBatch, warnings }));
+}
+
 async function commandNightly(args: ParsedArgs): Promise<void> {
   const dbPath = flagString(args, "db", defaultDatabasePath());
   const models = await loadModelsConfig(flagString(args, "models", "config/models.yaml"));
@@ -275,6 +296,9 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
       return;
     case "nightly":
       await commandNightly(args);
+      return;
+    case "drift":
+      await commandDrift(args);
       return;
     case "report":
       await commandReport(args);
