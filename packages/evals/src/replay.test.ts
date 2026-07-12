@@ -10,7 +10,7 @@ import {
   upsertSession,
 } from "@model-routing/datastore";
 import type { EvalConfig, ModelsConfig } from "@model-routing/shared";
-import { replayVariants, runReplayStage, variantModel } from "./replay";
+import { replayAgentPermissions, replayVariants, runReplayStage, variantModel } from "./replay";
 
 const config: EvalConfig = {
   sampling: {
@@ -87,6 +87,22 @@ describe("replayVariants", () => {
     expect(variantModel("low", models)).toBe("claude-haiku-4-5-20251001");
     expect(variantModel("mid+demote", models)).toBe("claude-fable-5");
     expect(replayVariants(config, models)).toHaveLength(4);
+  });
+});
+
+describe("replayAgentPermissions", () => {
+  test("auto-approves only worktree coding tools inside a mandatory sandbox", () => {
+    expect(replayAgentPermissions()).toEqual({
+      permissionMode: "acceptEdits",
+      tools: ["Read", "Edit", "Write", "Bash", "Glob", "Grep"],
+      allowedTools: ["Read", "Edit", "Write", "Bash", "Glob", "Grep"],
+      sandbox: {
+        enabled: true,
+        failIfUnavailable: true,
+        autoAllowBashIfSandboxed: true,
+        allowUnsandboxedCommands: false,
+      },
+    });
   });
 });
 

@@ -28,6 +28,22 @@ export type ReplayExecutor = (args: {
   gatewayBaseUrl?: string;
 }) => Promise<ReplayExecutionResult>;
 
+const REPLAY_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"];
+
+export function replayAgentPermissions() {
+  return {
+    permissionMode: "acceptEdits" as const,
+    tools: REPLAY_TOOLS,
+    allowedTools: REPLAY_TOOLS,
+    sandbox: {
+      enabled: true,
+      failIfUnavailable: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: false,
+    },
+  };
+}
+
 export function variantModel(variantId: string, models: ModelsConfig): string {
   if (variantId === "high") {
     return models.tiers.high.model;
@@ -110,7 +126,7 @@ export async function defaultReplayExecutor(args: {
       options: {
         model: args.variant.model,
         cwd: worktreePath,
-        permissionMode: "default",
+        ...replayAgentPermissions(),
         env: {
           ...Bun.env,
           ...(args.gatewayBaseUrl ? { ANTHROPIC_BASE_URL: args.gatewayBaseUrl } : {}),
