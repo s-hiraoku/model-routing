@@ -10,7 +10,7 @@ import {
   upsertSession,
 } from "@model-routing/datastore";
 import type { EvalConfig, ModelsConfig } from "@model-routing/shared";
-import { replayAgentPermissions, replayVariants, runReplayStage, variantModel } from "./replay";
+import { replayAgentPermissions, replayVariants, runReplayStage, startReplayGateway, variantModel } from "./replay";
 
 const config: EvalConfig = {
   sampling: {
@@ -103,6 +103,37 @@ describe("replayAgentPermissions", () => {
         allowUnsandboxedCommands: false,
       },
     });
+  });
+});
+
+describe("startReplayGateway", () => {
+  test("binds each replay run to a separate ephemeral port", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-replay-gateway-"));
+    const first = startReplayGateway({
+      runId: "run-1",
+      variantId: "mid",
+      upstreamBaseUrl: "https://upstream.invalid",
+      dataDir: dir,
+      dbPath: join(dir, "model-routing.db"),
+      models,
+    });
+    const second = startReplayGateway({
+      runId: "run-2",
+      variantId: "mid+demote",
+      upstreamBaseUrl: "https://upstream.invalid",
+      dataDir: dir,
+      dbPath: join(dir, "model-routing.db"),
+      models,
+    });
+
+    try {
+      expect(first.port).not.toBe(second.port);
+      expect((await fetch(new URL("/internal/healthz", first.url))).status).toBe(200);
+    } finally {
+      first.stop(true);
+      second.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -9,6 +9,7 @@ import {
   listReplayRunsForTask,
   type ReplayRunInsert,
 } from "@model-routing/datastore";
+import { createGatewayApp, createReplayVariantPolicies } from "@model-routing/gateway";
 import { type EvalConfig, type ModelsConfig, uuidv7 } from "@model-routing/shared";
 import { addWorktree, collectPatch, removeWorktree, runCommand, writeRunArtifact } from "./worktree";
 
@@ -24,8 +25,10 @@ export type ReplayExecutor = (args: {
   task: EvalTaskRow;
   variant: ReplayVariant;
   config: EvalConfig;
+  models: ModelsConfig;
   dataDir: string;
-  gatewayBaseUrl?: string;
+  dbPath: string;
+  upstreamBaseUrl: string;
 }) => Promise<ReplayExecutionResult>;
 
 const REPLAY_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep"];
@@ -63,24 +66,27 @@ export function replayVariants(config: EvalConfig, models: ModelsConfig): Replay
   }));
 }
 
-async function notifyReplayGateway(args: {
-  gatewayBaseUrl: string | undefined;
-  path: "/internal/replay-begin" | "/internal/replay-end";
+export function startReplayGateway(args: {
   runId: string;
   variantId: string;
-}): Promise<void> {
-  if (!args.gatewayBaseUrl) {
-    return;
-  }
-
-  const response = await fetch(new URL(args.path, args.gatewayBaseUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ run_id: args.runId, variant: args.variantId }),
+  upstreamBaseUrl: string;
+  dataDir: string;
+  dbPath: string;
+  models: ModelsConfig;
+}) {
+  return Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: createGatewayApp({
+      upstream: args.upstreamBaseUrl,
+      mode: "passthrough",
+      dataDir: args.dataDir,
+      dbPath: args.dbPath,
+      models: args.models,
+      variantPolicies: createReplayVariantPolicies(),
+      replayContext: { runId: args.runId, variant: args.variantId },
+    }).fetch,
   });
-  if (!response.ok) {
-    throw new Error(`${args.path} failed: ${response.status}`);
-  }
 }
 
 export async function defaultReplayExecutor(args: {
@@ -88,8 +94,10 @@ export async function defaultReplayExecutor(args: {
   task: EvalTaskRow;
   variant: ReplayVariant;
   config: EvalConfig;
+  models: ModelsConfig;
   dataDir: string;
-  gatewayBaseUrl?: string;
+  dbPath: string;
+  upstreamBaseUrl: string;
 }): Promise<ReplayExecutionResult> {
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const worktreeRoot = await mkdtemp(join(tmpdir(), "model-routing-replay-"));
@@ -98,6 +106,7 @@ export async function defaultReplayExecutor(args: {
   const startedAt = Date.now();
   const transcript: unknown[] = [];
   let finalMessage = "";
+  let replayGateway: ReturnType<typeof Bun.serve> | null = null;
 
   try {
     await addWorktree({
@@ -114,11 +123,13 @@ export async function defaultReplayExecutor(args: {
       }
     }
 
-    await notifyReplayGateway({
-      gatewayBaseUrl: args.gatewayBaseUrl,
-      path: "/internal/replay-begin",
+    replayGateway = startReplayGateway({
       runId: args.runId,
       variantId: args.variant.id,
+      upstreamBaseUrl: args.upstreamBaseUrl,
+      dataDir: args.dataDir,
+      dbPath: args.dbPath,
+      models: args.models,
     });
 
     for await (const message of query({
@@ -129,7 +140,7 @@ export async function defaultReplayExecutor(args: {
         ...replayAgentPermissions(),
         env: {
           ...Bun.env,
-          ...(args.gatewayBaseUrl ? { ANTHROPIC_BASE_URL: args.gatewayBaseUrl } : {}),
+          ANTHROPIC_BASE_URL: replayGateway.url.toString(),
           MODEL_ROUTING_REPLAY_RUN_ID: args.runId,
           MODEL_ROUTING_VARIANT: args.variant.id,
           CLAUDE_AGENT_SDK_CLIENT_APP: "model-routing-evals-replay",
@@ -182,12 +193,7 @@ export async function defaultReplayExecutor(args: {
       errorMessage: error instanceof Error ? error.message : "unknown replay error",
     };
   } finally {
-    await notifyReplayGateway({
-      gatewayBaseUrl: args.gatewayBaseUrl,
-      path: "/internal/replay-end",
-      runId: args.runId,
-      variantId: args.variant.id,
-    }).catch((error) => console.warn(`[evals] replay-end failed: ${error}`));
+    replayGateway?.stop(true);
     await removeWorktree(args.task.repoPath, worktreePath);
   }
 }
@@ -198,7 +204,7 @@ export async function runReplayStage(args: {
   config: EvalConfig;
   models: ModelsConfig;
   dataDir: string;
-  gatewayBaseUrl?: string;
+  upstreamBaseUrl?: string;
   executor?: ReplayExecutor;
 }): Promise<{ tasks: number; insertedRuns: number; skippedRuns: number }> {
   const tasks = listEvalTasksByBatch(args.dbPath, args.batchId);
@@ -222,8 +228,10 @@ export async function runReplayStage(args: {
         task,
         variant,
         config: args.config,
+        models: args.models,
         dataDir: args.dataDir,
-        gatewayBaseUrl: args.gatewayBaseUrl,
+        dbPath: args.dbPath,
+        upstreamBaseUrl: args.upstreamBaseUrl ?? "https://api.anthropic.com",
       });
 
       insertReplayRun(args.dbPath, {

@@ -99,13 +99,15 @@ unknown / confidence < 0.8 を **Agent SDK(low tier、ツール無効、gateway 
 
 ```
 replayer
+ ├─ run 固有の gateway を createGatewayApp でエフェメラルポートに起動
  └─ Agent SDK query({ prompt, model: variantのtier, cwd: worktree,
-                      permissionMode: 編集自動承認相当, env: { ANTHROPIC_BASE_URL: gateway } })
-      └─ gateway が X-MR-Variant を見てポリシー適用(mid+demote のみ書き換え発生)
+                      permissionMode: acceptEdits, allowedTools: 編集+Bash等に限定,
+                      env: { ANTHROPIC_BASE_URL: run固有gateway } })
+      └─ gateway が固定 replay context を見てポリシー適用(mid+demote のみ書き換え発生)
 ```
 
 - Agent SDK の権限・ツール設定は「worktree 内の編集 + Bash は自動承認、worktree 外への書き込み禁止」を構成(**具体的なオプション名は実装時に Agent SDK 最新ドキュメントで確認**)
-- `X-MR-Variant` は SDK のカスタムヘッダ設定で付与(不可なら variant 情報を gateway の `/internal/replay-begin` 事前通知方式にフォールバック)
+- 専用 gateway は `{ run_id, variant }` を起動時に固定し、本番 gateway の状態やログを共有しない。`X-MR-Variant` が入力にあっても上流へは転送しない
 - タイムアウトで SIGTERM → 5 秒後 SIGKILL。429 は `rate_limited` で記録しバッチ中断
 - **baseline も毎回再実行**(過去成果物の使い回しはしない。条件を揃える)
 
@@ -257,7 +259,7 @@ bun run review-ui
 
 M1 時点では `classify` はデフォルトでヒューリスティックのみ実行する。`--llm` を付けると unknown / confidence < 0.8 の task_events を Claude Agent SDK(low tier、ツール無効)へ送る。`sample` は `--yes` なしでは dry run として枠見積もりだけを表示する。
 
-M2 の `replay` は `eval_tasks` ごとに configured variant の `replay_runs` を作成し、既存 run はスキップする。実行成果物は `data/runs/{replay_run_id}/` に保存する。`mid+demote` は mid tier モデルで実行し、gateway 側へ `/internal/replay-begin` / `/internal/replay-end` で active variant を通知する。gateway は passthrough モードのまま replay 中の agent step だけ low tier へ書き換え、`requests.replay_run_id` と `shift_events` に記録する。
+M2 の `replay` は `eval_tasks` ごとに configured variant の `replay_runs` を作成し、既存 run はスキップする。実行成果物は `data/runs/{replay_run_id}/` に保存する。各 run は固定 `run_id` / `variant` を持つ専用 gateway をエフェメラルポートで起動し、完了時に停止する。`mid+demote` は mid tier モデルで実行し、専用 gateway が passthrough モードのまま agent step だけ low tier へ書き換え、`requests.replay_run_id` と `shift_events` に記録する。
 
 M2 の `judge` は `replay_runs.status = 'ok'` の baseline(mid) と各 non-baseline run を比較し、`judgments` に `candidate_win` / `baseline_win` / `tie` を保存する。`judge.position_swap = true` の場合は candidate-first / baseline-first の 2 件を作り、既存 judgment は `(eval_task_id, candidate_run_id, position)` でスキップする。ジャッジには Agent SDK の `outputFormat: json_schema`、`tools: []`、`maxTurns: 1` を使い、JSON パース失敗時は 1 回リトライする。
 

@@ -36,12 +36,10 @@ export type GatewayOptions = {
   models?: ModelsConfig;
   variantPolicies?: Record<string, ShiftPolicy>;
   shiftPolicyRef?: { current: ShiftPolicy | null };
-};
-
-type ActiveReplay = {
-  runId: string;
-  variant: string;
-  expiresAt: number;
+  replayContext?: {
+    runId: string;
+    variant: string;
+  };
 };
 
 type PreparedMessagesRequest = {
@@ -324,11 +322,6 @@ const taskEventSchema = z.object({
   git_remote: z.string().nullable().optional(),
 });
 
-const replayControlSchema = z.object({
-  run_id: z.string().min(1),
-  variant: z.string().min(1),
-});
-
 function isLocalRequest(req: Request): boolean {
   const hostname = new URL(req.url).hostname;
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
@@ -396,19 +389,19 @@ export function createReplayVariantPolicies(): Record<string, ShiftPolicy> {
 
 function resolveReplayVariant(
   req: Request,
-  activeReplay: ActiveReplay | null,
+  replayContext?: GatewayOptions["replayContext"],
 ): { variant: string; runId: string | null } | null {
   if (!isLocalRequest(req)) {
     return null;
   }
 
+  if (replayContext) {
+    return replayContext;
+  }
+
   const headerVariant = req.headers.get("x-mr-variant");
   if (headerVariant) {
     return { variant: headerVariant, runId: null };
-  }
-
-  if (activeReplay && activeReplay.expiresAt > Date.now()) {
-    return { variant: activeReplay.variant, runId: activeReplay.runId };
   }
 
   return null;
@@ -420,11 +413,11 @@ function prepareMessagesRequest(args: {
   models?: ModelsConfig;
   mode: GatewayMode;
   variantPolicies: Record<string, ShiftPolicy>;
-  activeReplay: ActiveReplay | null;
+  replayContext?: GatewayOptions["replayContext"];
   shiftPolicy: ShiftPolicy | null;
   sessionState: SessionShiftState;
 }): PreparedMessagesRequest {
-  const replay = resolveReplayVariant(args.req, args.activeReplay);
+  const replay = resolveReplayVariant(args.req, args.replayContext);
   if (!replay) {
     return prepareProductionShift(args);
   }
@@ -560,7 +553,6 @@ async function proxyToUpstream(req: Request, options: GatewayOptions): Promise<R
 async function proxyMessagesRequest(
   req: Request,
   options: Required<GatewayOptions>,
-  activeReplay: ActiveReplay | null,
   sessionState: SessionShiftState,
 ): Promise<Response> {
   const requestId = uuidv7();
@@ -572,7 +564,7 @@ async function proxyMessagesRequest(
     models: options.models,
     mode: options.mode,
     variantPolicies: options.variantPolicies,
-    activeReplay,
+    replayContext: options.replayContext,
     shiftPolicy: options.shiftPolicyRef.current,
     sessionState,
   });
@@ -686,8 +678,8 @@ export function createGatewayApp(options: GatewayOptions): Hono {
     upstream: options.upstream,
     variantPolicies: options.variantPolicies ?? {},
     shiftPolicyRef: options.shiftPolicyRef ?? { current: null },
+    replayContext: options.replayContext,
   };
-  let activeReplay: ActiveReplay | null = null;
   const sessionState: SessionShiftState = {
     taskEventId: null,
     category: null,
@@ -776,50 +768,15 @@ export function createGatewayApp(options: GatewayOptions): Hono {
     });
   });
 
-  app.post("/internal/replay-begin", async (c) => {
-    if (!isLocalRequest(c.req.raw)) {
-      return c.json({ error: "forbidden" }, 403);
-    }
-
-    const parsed = replayControlSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) {
-      return c.json({ error: "invalid replay control" }, 400);
-    }
-
-    activeReplay = {
-      runId: parsed.data.run_id,
-      variant: parsed.data.variant,
-      expiresAt: Date.now() + 30 * 60 * 1000,
-    };
-
-    return c.json({ status: "ok" });
-  });
-
-  app.post("/internal/replay-end", async (c) => {
-    if (!isLocalRequest(c.req.raw)) {
-      return c.json({ error: "forbidden" }, 403);
-    }
-
-    const parsed = replayControlSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) {
-      return c.json({ error: "invalid replay control" }, 400);
-    }
-
-    if (activeReplay?.runId === parsed.data.run_id) {
-      activeReplay = null;
-    }
-
-    return c.json({ status: "ok" });
-  });
-
   app.post("/v1/messages", (c) => {
     if (!resolvedOptions.enableLogging) {
       return proxyToUpstream(c.req.raw, resolvedOptions);
     }
 
-    return proxyMessagesRequest(c.req.raw, resolvedOptions, activeReplay, sessionState);
+    return proxyMessagesRequest(c.req.raw, resolvedOptions, sessionState);
   });
 
+  app.all("/internal/*", (c) => c.json({ error: "not found" }, 404));
   app.all("*", (c) => proxyToUpstream(c.req.raw, resolvedOptions));
 
   return app;

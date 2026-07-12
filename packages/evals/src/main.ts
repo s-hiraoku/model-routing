@@ -147,7 +147,7 @@ async function commandRun(args: ParsedArgs): Promise<void> {
       config,
       models,
       dataDir: flagString(args, "data-dir", Bun.env.DATA_DIR ?? "data"),
-      gatewayBaseUrl: flagString(args, "gateway", ""),
+      upstreamBaseUrl: flagString(args, "upstream", Bun.env.UPSTREAM ?? "https://api.anthropic.com"),
     });
     console.info(`replay: tasks=${result.tasks} inserted=${result.insertedRuns} skipped=${result.skippedRuns}`);
   }

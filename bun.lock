@@ -32,6 +32,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.201",
         "@model-routing/datastore": "workspace:*",
+        "@model-routing/gateway": "workspace:*",
         "@model-routing/shared": "workspace:*",
         "yaml": "^2.9.0",
       },

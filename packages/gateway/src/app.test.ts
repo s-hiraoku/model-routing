@@ -143,6 +143,7 @@ describe("gateway app", () => {
           "content-type": "application/json",
           "keep-alive": "timeout=5",
           te: "trailers",
+          "x-mr-variant": "mid+demote",
           "x-remove-me": "1",
         },
         body: JSON.stringify({ model: "claude-fable-5", messages: [] }),
@@ -158,7 +159,7 @@ describe("gateway app", () => {
     }
   });
 
-  test("applies active replay variant seam without enabling production shifting", async () => {
+  test("applies a fixed replay context without enabling production shifting", async () => {
     const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-variant-"));
     const dataDir = join(dir, "data");
     const dbPath = join(dataDir, "model-routing.db");
@@ -180,17 +181,12 @@ describe("gateway app", () => {
         dbPath,
         models,
         variantPolicies: createReplayVariantPolicies(),
+        replayContext: { runId: "run-1", variant: "mid+demote" },
       });
-      const begin = await app.request("http://127.0.0.1/internal/replay-begin", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ run_id: "run-1", variant: "mid+demote" }),
-      });
-      expect(begin.status).toBe(200);
 
       const response = await app.request("http://127.0.0.1/v1/messages", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-mr-variant": "high" },
         body: JSON.stringify({
           model: "claude-fable-5",
           stream: false,
@@ -239,6 +235,34 @@ describe("gateway app", () => {
     } finally {
       upstream.stop(true);
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does not proxy removed replay control endpoints upstream", async () => {
+    let upstreamRequests = 0;
+    const upstream = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        upstreamRequests += 1;
+        return Response.json({ ok: true });
+      },
+    });
+
+    try {
+      const app = createGatewayApp({
+        upstream: upstream.url.toString(),
+        mode: "passthrough",
+        enableLogging: false,
+      });
+
+      for (const path of ["replay-begin", "replay-end"]) {
+        const response = await app.request(`http://127.0.0.1/internal/${path}`, { method: "POST" });
+        expect(response.status).toBe(404);
+      }
+      expect(upstreamRequests).toBe(0);
+    } finally {
+      upstream.stop(true);
     }
   });
 
