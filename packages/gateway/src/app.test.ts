@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -523,6 +523,67 @@ describe("gateway app", () => {
       }
     } finally {
       upstream.stop(true);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("records a partial streaming response when the tee log body errors", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "model-routing-gateway-stream-abort-"));
+    const dataDir = join(dir, "data");
+    const dbPath = join(dataDir, "model-routing.db");
+    const partialSse =
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-fable-5","content":[],"usage":{"input_tokens":10}}}\n\n';
+    const upstreamResponse = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(partialSse));
+          setTimeout(() => controller.error(new Error("client disconnected")), 10);
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } },
+    );
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(upstreamResponse);
+
+    try {
+      const app = createGatewayApp({
+        upstream: "https://upstream.invalid",
+        mode: "passthrough",
+        dataDir,
+        dbPath,
+      });
+      const response = await app.request("http://127.0.0.1/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-fable-5",
+          stream: true,
+          messages: [{ role: "user", content: "hello" }],
+        }),
+      });
+
+      await response.text().catch(() => partialSse);
+
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const row = await waitFor(() =>
+          db
+            .query<{ status: string; error_message: string | null; body_path: string }, []>(
+              "SELECT status, error_message, body_path FROM requests LIMIT 1",
+            )
+            .get(),
+        );
+        expect(row.status).toBe("client_abort");
+        expect(row.error_message).toBe("client disconnected");
+
+        const stored = (await readZstdJson(row.body_path)) as {
+          response?: { body?: { id?: string } };
+        };
+        expect(stored.response?.body?.id).toBe("msg_1");
+      } finally {
+        db.close();
+      }
+    } finally {
+      fetchSpy.mockRestore();
       await rm(dir, { recursive: true, force: true });
     }
   });

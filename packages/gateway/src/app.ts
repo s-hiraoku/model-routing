@@ -129,12 +129,31 @@ function parseResponseForLog(
   };
 }
 
-async function readStreamText(stream: ReadableStream<Uint8Array> | null): Promise<string> {
+async function readStreamText(
+  stream: ReadableStream<Uint8Array> | null,
+): Promise<{ text: string; error: Error | null }> {
   if (!stream) {
-    return "";
+    return { text: "", error: null };
   }
 
-  return new Response(stream).text();
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        return { text: text + decoder.decode(), error: null };
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    return {
+      text: text + decoder.decode(),
+      error: error instanceof Error ? error : new Error("response stream aborted"),
+    };
+  }
 }
 
 async function logMessagesRequest(args: {
@@ -150,8 +169,8 @@ async function logMessagesRequest(args: {
   upstreamResponse: Response;
 }): Promise<void> {
   const features = extractRequestFeatures(args.rawRequestBody);
-  const responseText = await readStreamText(args.responseBody);
-  const response = parseResponseForLog(args.upstreamResponse.headers.get("content-type"), responseText);
+  const streamRead = await readStreamText(args.responseBody);
+  const response = parseResponseForLog(args.upstreamResponse.headers.get("content-type"), streamRead.text);
   const bodyPath = bodyPathForRequest(args.dataDir, args.requestId, new Date(args.startedAt));
 
   await writeZstdJson(bodyPath, {
@@ -165,7 +184,7 @@ async function logMessagesRequest(args: {
     },
   });
 
-  const status = requestStatus(args.upstreamResponse.status);
+  const status = streamRead.error ? "client_abort" : requestStatus(args.upstreamResponse.status);
 
   insertRequestLog(args.dbPath, {
     id: args.requestId,
@@ -190,7 +209,7 @@ async function logMessagesRequest(args: {
     stopReason: response.metadata.stopReason,
     latencyMs: Date.now() - args.startedAt,
     ttftMs: null,
-    errorMessage: null,
+    errorMessage: streamRead.error?.message ?? null,
     bodyPath,
   });
 
